@@ -1,0 +1,51 @@
+"""Live Telegram source: one Telethon client per linked user account (userbot, read-only).
+
+Rules: never post, never bulk-join, never touch read status; FloodWait is handled by
+Telethon (flood_sleep_threshold). Session strings arrive decrypted in memory only.
+"""
+from __future__ import annotations
+
+import logging
+
+from .base import OnPost, RawPost
+
+log = logging.getLogger("pipstream.ingestor.telethon")
+
+
+class TelethonSource:
+    def __init__(self, account_id: str, session_string: str, api_id: int, api_hash: str):
+        self.account_id = account_id
+        self._session = session_string
+        self._api_id, self._api_hash = api_id, api_hash
+        self._client = None
+
+    async def start(self, on_post: OnPost) -> None:
+        from telethon import TelegramClient, events
+        from telethon.sessions import StringSession
+
+        client = TelegramClient(StringSession(self._session), self._api_id, self._api_hash,
+                                flood_sleep_threshold=60, receive_updates=True)
+        self._session = None  # drop plaintext reference
+        await client.connect()
+        if not await client.is_user_authorized():
+            raise RuntimeError(f"telegram session for {self.account_id} is not authorized")
+
+        async def _emit(event, is_edit: bool):
+            m = event.message
+            if not event.is_channel and not event.is_group:
+                return
+            reply_to = m.reply_to.reply_to_msg_id if m.reply_to else None
+            await on_post(self.account_id, RawPost(
+                tg_chat_id=event.chat_id, message_id=m.id, text=m.message or "",
+                reply_to_id=reply_to, is_edit=is_edit, has_media=m.media is not None,
+                posted_at=m.date))
+
+        client.add_event_handler(lambda e: _emit(e, False), events.NewMessage(incoming=True))
+        client.add_event_handler(lambda e: _emit(e, True), events.MessageEdited(incoming=True))
+        self._client = client
+        log.info("telethon source connected", extra={"ctx": {"telegram_account_id": self.account_id}})
+
+    async def stop(self) -> None:
+        if self._client:
+            await self._client.disconnect()
+            self._client = None

@@ -1,0 +1,106 @@
+# PipStream experiment configuration (no web app yet - this file is the "admin page").
+# Load with:  pipstream seed config/pipstream.yaml   (idempotent; safe to re-run)
+#
+# !! PLACEHOLDERS !!  Channel ids, titles, house formats and the sample posts in
+# config/replay/sample_posts.jsonl are INVENTED examples. Replace them with the real target
+# channels once you have samples (run `python -m pipstream.services.ingestor.login ...
+# --list-channels` to print the ids of channels the spare account has joined).
+#
+# Secrets never go in this file: broker accounts point at env vars (credentials_env) and
+# are seeded DISABLED when any of them is missing.
+
+plans:
+  - {id: experiment, name: Experiment, max_accounts: 5, allow_live: true, price_cents: 0, currency: KES}
+  - {id: trial, name: Free trial (paper only), max_accounts: 1, allow_live: false}
+
+connectors:
+  - {name: paper, kind: paper}
+  - {name: mt5_bridge, kind: cfd}
+  - {name: deriv_options, kind: options}
+
+users:
+  - id: usr_owner
+    email: owner@example.com          # placeholder
+    display_name: Owner
+    plan: experiment
+    notify:
+      - {channel: log}
+      - {channel: telegram_bot, address_env: PS_SEED_ALERT_CHAT_ID}
+
+telegram_accounts:
+  - {id: tga_spare, user_id: usr_owner}   # link the session with ingestor.login
+
+parser_profiles:
+  - id: pp_generic
+    name: Generic rule-based
+    min_confidence: 0.8
+    ignore_patterns: ["\\bVIP\\b.*\\bJOIN\\b", "\\bPROMO\\b", "\\bDISCOUNT\\b"]
+  - id: pp_gold_house                     # PLACEHOLDER house format
+    name: Gold channel house format
+    min_confidence: 0.85
+    require_sl: true
+    symbol_aliases: {"GOLD SPOT": XAUUSD}
+    templates:
+      - name: gold_range
+        pattern: "(?P<symbol>XAUUSD|GOLD)\\s+(?P<side>BUY|SELL)\\s+(?P<entry_from>\\d+(?:\\.\\d+)?)\\s*-\\s*(?P<entry_to>\\d+(?:\\.\\d+)?)\\s+SL\\s+(?P<sl>\\d+(?:\\.\\d+)?)\\s+TP\\s+(?P<tp1>\\d+(?:\\.\\d+)?)(?:\\s*/\\s*(?P<tp2>\\d+(?:\\.\\d+)?))?(?:\\s*/\\s*(?P<tp3>\\d+(?:\\.\\d+)?))?"
+  - id: pp_synthetics
+    name: Deriv synthetics (options)
+    min_confidence: 0.8
+
+channels:
+  - id: ch_gold_demo
+    tg_chat_id: -1001000000001            # PLACEHOLDER
+    title: Gold signals (placeholder)
+    parser_profile: pp_gold_house
+    readers: [{account: tga_spare, role: active}]
+    subscribers: [usr_owner]
+  - id: ch_fx_demo
+    tg_chat_id: -1001000000002            # PLACEHOLDER
+    title: FX majors (placeholder)
+    parser_profile: pp_generic
+    readers: [{account: tga_spare, role: active}]
+    subscribers: [usr_owner]
+  - id: ch_synth_demo
+    tg_chat_id: -1001000000003            # PLACEHOLDER
+    title: Synthetics options (placeholder)
+    parser_profile: pp_synthetics
+    readers: [{account: tga_spare, role: active}]
+    subscribers: [usr_owner]
+
+broker_accounts:
+  - id: ba_paper
+    user_id: usr_owner
+    connector: paper
+    label: Paper account
+    credentials: {starting_balance: 10000, currency: USD}   # not secret
+  - id: ba_mt5_demo
+    user_id: usr_owner
+    connector: mt5_bridge
+    label: MT5 demo via Wine bridge
+    credentials_env: {host: PS_MT5_HOST, port: PS_MT5_PORT, login: PS_MT5_LOGIN, password: PS_MT5_PASSWORD, server: PS_MT5_SERVER}
+    symbol_map: {}                        # e.g. {XAUUSD: XAUUSDm} for Exness; empty = auto-resolve
+  - id: ba_deriv_demo
+    user_id: usr_owner
+    connector: deriv_options
+    label: Deriv options demo
+    credentials_env: {token: PS_DERIV_TOKEN, app_id: PS_DERIV_APP_ID}
+
+copy_rules:
+  # Week 1 - shadow mode: parse and record "would have traded", no orders at all.
+  - {id: rule_gold_shadow, user_id: usr_owner, channel_id: ch_gold_demo, broker_account_id: ba_mt5_demo,
+     mode: shadow, sizing_mode: risk_pct, risk_pct: 1.0, max_lot: 0.5}
+  # Paper copies for every channel (safe default for new channels).
+  - {id: rule_gold_paper, user_id: usr_owner, channel_id: ch_gold_demo, broker_account_id: ba_paper,
+     mode: paper, sizing_mode: risk_pct, risk_pct: 1.0, max_lot: 1.0,
+     limits: {max_open_trades: 10, max_daily_loss: 300}}
+  - {id: rule_fx_paper, user_id: usr_owner, channel_id: ch_fx_demo, broker_account_id: ba_paper,
+     mode: paper, sizing_mode: fixed, fixed_lots: 0.1, max_lot: 1.0,
+     filters: {symbols_deny: [USDCHF]}, limits: {max_open_trades: 10}}
+  - {id: rule_synth_paper, user_id: usr_owner, channel_id: ch_synth_demo, broker_account_id: ba_paper,
+     mode: paper, sizing_mode: stake, stake: 1.0}
+  # Week 2 - demo execution (enable when the bridge / Deriv token are configured).
+  - {id: rule_gold_mt5, user_id: usr_owner, channel_id: ch_gold_demo, broker_account_id: ba_mt5_demo,
+     enabled: false, mode: live, sizing_mode: risk_pct, risk_pct: 0.5, max_lot: 0.2,
+     limits: {max_open_trades: 5, max_daily_loss: 100, max_entry_slippage_points: 300}}
+  - {id: rule_synth_deriv, user_id: usr_owner, channel_id: ch_synth_demo, broker_account_id: ba_deriv_demo,
+     enabled: false, mode: live, sizing_mode: stake, stake: 1.0, limits: {max_stake: 5}}

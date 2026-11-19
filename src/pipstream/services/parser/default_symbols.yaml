@@ -1,0 +1,36 @@
+# Canonical symbol catalog used by the parser (aliases, pip size) and by the paper connector
+# (contract size). Broker-specific specs (tick value, lot step) always come from the broker's
+# account_info() at runtime; these are defaults only. Override with PS_SYMBOLS_FILE.
+#
+# pip: price step traders call "1 pip" (0.0001 most FX, 0.01 JPY pairs, 0.1 gold by
+# common signal-channel convention). point: smallest quote step.
+symbols:
+  EURUSD: {kind: fx, pip: 0.0001, point: 0.00001, contract_size: 100000, aliases: [FIBER]}
+  GBPUSD: {kind: fx, pip: 0.0001, point: 0.00001, contract_size: 100000, aliases: [GU, CABLE]}
+  AUDUSD: {kind: fx, pip: 0.0001, point: 0.00001, contract_size: 100000, aliases: [AUSSIE]}
+  NZDUSD: {kind: fx, pip: 0.0001, point: 0.00001, contract_size: 100000, aliases: [KIWI]}
+  USDCAD: {kind: fx, pip: 0.0001, point: 0.00001, contract_size: 100000, aliases: [LOONIE]}
+  USDCHF: {kind: fx, pip: 0.0001, point: 0.00001, contract_size: 100000, aliases: [SWISSY]}
+  EURGBP: {kind: fx, pip: 0.0001, point: 0.00001, contract_size: 100000, aliases: []}
+  USDJPY: {kind: fx, pip: 0.01, point: 0.001, contract_size: 100000, aliases: [UJ, GOPHER]}
+  EURJPY: {kind: fx, pip: 0.01, point: 0.001, contract_size: 100000, aliases: [EJ]}
+  GBPJPY: {kind: fx, pip: 0.01, point: 0.001, contract_size: 100000, aliases: [GJ, GEPPY]}
+  XAUUSD: {kind: metal, pip: 0.1, point: 0.01, contract_size: 100, aliases: [GOLD, XAU]}
+  XAGUSD: {kind: metal, pip: 0.01, point: 0.001, contract_size: 5000, aliases: [SILVER, XAG]}
+  US30:   {kind: index, pip: 1.0, point: 0.1, contract_size: 1, aliases: [DOW, DJ30, DJI, WALLSTREET]}
+  NAS100: {kind: index, pip: 1.0, point: 0.1, contract_size: 1, aliases: [NASDAQ, US100, USTEC, NAS]}
+  SPX500: {kind: index, pip: 1.0, point: 0.1, contract_size: 1, aliases: [US500, SP500, SPX]}
+  BTCUSD: {kind: crypto, pip: 1.0, point: 0.01, contract_size: 1, aliases: [BTC, BITCOIN, BTCUSDT]}
+  ETHUSD: {kind: crypto, pip: 0.1, point: 0.01, contract_size: 1, aliases: [ETH, ETHEREUM, ETHUSDT]}
+  # Deriv synthetic indices (Deriv API symbols). On Deriv MT5 the broker names differ
+  # ("Volatility 75 Index") and are mapped per broker account via symbol_map.
+  R_10:     {kind: synthetic, pip: 0.001, point: 0.001, contract_size: 1, aliases: [V10, VOLATILITY 10, VIX10]}
+  R_25:     {kind: synthetic, pip: 0.001, point: 0.001, contract_size: 1, aliases: [V25, VOLATILITY 25, VIX25]}
+  R_50:     {kind: synthetic, pip: 0.0001, point: 0.0001, contract_size: 1, aliases: [V50, VOLATILITY 50, VIX50]}
+  R_75:     {kind: synthetic, pip: 0.0001, point: 0.0001, contract_size: 1, aliases: [V75, VOLATILITY 75, VIX75]}
+  R_100:    {kind: synthetic, pip: 0.01, point: 0.01, contract_size: 1, aliases: [V100, VOLATILITY 100, VIX100]}
+  1HZ75V:   {kind: synthetic, pip: 0.01, point: 0.01, contract_size: 1, aliases: [V75 1S, V75(1S), VOLATILITY 75 1S]}
+  BOOM1000: {kind: synthetic, pip: 0.001, point: 0.001, contract_size: 1, aliases: [BOOM 1000, B1000]}
+  CRASH1000: {kind: synthetic, pip: 0.001, point: 0.001, contract_size: 1, aliases: [CRASH 1000, C1000]}
+  BOOM500:  {kind: synthetic, pip: 0.001, point: 0.001, contract_size: 1, aliases: [BOOM 500, B500]}
+  CRASH500: {kind: synthetic, pip: 0.001, point: 0.001, contract_size: 1, aliases: [CRASH 500, C500]}

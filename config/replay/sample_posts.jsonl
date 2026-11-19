@@ -1,0 +1,10 @@
+// PLACEHOLDER posts (invented) for PS_INGESTOR_SOURCE=replay. Replace with real samples.
+{"tg_chat_id": -1001000000001, "message_id": 101, "text": "Good morning traders! Big NFP week ahead 📊", "delay_ms": 300}
+{"tg_chat_id": -1001000000001, "message_id": 102, "text": "XAUUSD BUY 2348-2350 SL 2340 TP 2360 / 2375", "delay_ms": 300}
+{"tg_chat_id": -1001000000002, "message_id": 201, "text": "🔥 EURUSD SELL NOW @ 1.0850\nSL: 1.0880\nTP1: 1.0820\nTP2: 1.0790", "delay_ms": 300}
+{"tg_chat_id": -1001000000002, "message_id": 202, "text": "USDCHF buy 0.8820 sl 0.8790 tp 0.8860", "delay_ms": 300}
+{"tg_chat_id": -1001000000003, "message_id": 301, "text": "V75 RISE 5 ticks stake $2", "delay_ms": 300}
+{"tg_chat_id": -1001000000001, "message_id": 103, "text": "TP1 hit ✅ +100 pips 🚀", "delay_ms": 800}
+{"tg_chat_id": -1001000000001, "message_id": 104, "text": "Move SL to entry", "reply_to_id": 102, "delay_ms": 800}
+{"tg_chat_id": -1001000000002, "message_id": 203, "text": "close half", "reply_to_id": 201, "delay_ms": 800}
+{"tg_chat_id": -1001000000002, "message_id": 204, "text": "JOIN our VIP for 90% accuracy!! limited DISCOUNT", "delay_ms": 300}

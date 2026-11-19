@@ -1,0 +1,210 @@
+# PipStream low-cost experiment: one VPS, Docker Compose.
+#   cp .env.example .env && docker compose run --rm keys >> .env   (then edit .env)
+#   docker compose up -d --build
+# Only core-api is reachable, and only on 127.0.0.1 (put Caddy/Traefik or NanoDeploi in front).
+# Every worker gets ONLY the secrets it needs (explicit `environment:`, no shared env_file),
+# and its own Redis ACL user (generated from src/pipstream/common/permissions.py).
+
+x-worker: &worker
+  image: pipstream:local
+  restart: unless-stopped
+  read_only: true
+  tmpfs: [/tmp]
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  depends_on:
+    migrate: {condition: service_completed_successfully}
+    redis: {condition: service_healthy}
+  networks: [internal]
+
+x-db: &db_url "postgresql://pipstream:${POSTGRES_PASSWORD}@postgres:5432/pipstream"
+
+services:
+  # ------------------------------------------------------------------ infrastructure
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: pipstream
+      POSTGRES_DB: pipstream
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set in .env}
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pipstream"]
+      interval: 5s
+      retries: 20
+    networks: [internal]
+
+  redis-acl:   # renders users.acl (per-service users + key/stream permissions)
+    image: pipstream:local
+    build: .
+    restart: "no"
+    user: "0"
+    command: ["sh", "-c", "python -m pipstream.common.permissions > /acl/users.acl && chmod 644 /acl/users.acl"]
+    environment:
+      PS_REDIS_PASSWORD_ADMIN: ${PS_REDIS_PASSWORD_ADMIN:?}
+      PS_REDIS_PASSWORD_INGESTOR: ${PS_REDIS_PASSWORD_INGESTOR:?}
+      PS_REDIS_PASSWORD_PARSER: ${PS_REDIS_PASSWORD_PARSER:?}
+      PS_REDIS_PASSWORD_RISK_ENGINE: ${PS_REDIS_PASSWORD_RISK_ENGINE:?}
+      PS_REDIS_PASSWORD_EXECUTION_ROUTER: ${PS_REDIS_PASSWORD_EXECUTION_ROUTER:?}
+      PS_REDIS_PASSWORD_POSITION_TRACKER: ${PS_REDIS_PASSWORD_POSITION_TRACKER:?}
+      PS_REDIS_PASSWORD_NOTIFICATIONS: ${PS_REDIS_PASSWORD_NOTIFICATIONS:?}
+      PS_REDIS_PASSWORD_BILLING: ${PS_REDIS_PASSWORD_BILLING:?}
+      PS_REDIS_PASSWORD_CORE_API: ${PS_REDIS_PASSWORD_CORE_API:?}
+    volumes: [redis-acl:/acl]
+    network_mode: none
+
+  redis:
+    image: redis:7.2-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--aclfile", "/acl/users.acl", "--appendonly", "yes"]
+    depends_on:
+      redis-acl: {condition: service_completed_successfully}
+    volumes: [redis-acl:/acl:ro, redisdata:/data]
+    healthcheck:   # NOAUTH also proves the server is up (default user is disabled)
+      test: ["CMD-SHELL", "redis-cli ping 2>&1 | grep -qE 'PONG|NOAUTH'"]
+      interval: 5s
+      retries: 20
+    networks: [internal]
+
+  migrate:     # one-shot: schema migrations + load config/pipstream.yaml
+    image: pipstream:local
+    restart: "no"
+    command: ["sh", "-c", "pipstream migrate && pipstream seed config/pipstream.yaml"]
+    depends_on:
+      postgres: {condition: service_healthy}
+    environment:
+      PS_DATABASE_URL: *db_url
+      PS_SECRETS_MASTER_KEYS: ${PS_SECRETS_MASTER_KEYS:?}
+      PS_MT5_HOST: ${PS_MT5_HOST:-}
+      PS_MT5_PORT: ${PS_MT5_PORT:-}
+      PS_MT5_LOGIN: ${PS_MT5_LOGIN:-}
+      PS_MT5_PASSWORD: ${PS_MT5_PASSWORD:-}
+      PS_MT5_SERVER: ${PS_MT5_SERVER:-}
+      PS_DERIV_TOKEN: ${PS_DERIV_TOKEN:-}
+      PS_DERIV_APP_ID: ${PS_DERIV_APP_ID:-}
+      PS_SEED_ALERT_CHAT_ID: ${PS_SEED_ALERT_CHAT_ID:-}
+    networks: [internal]
+
+  # ------------------------------------------------------------------ public edge
+  core-api:
+    <<: *worker
+    command: ["python", "-m", "pipstream.services.core_api"]
+    ports: ["127.0.0.1:${PS_API_PORT:-8080}:8080"]
+    environment:
+      PS_DATABASE_URL: *db_url
+      PS_REDIS_URL: redis://core_api:${PS_REDIS_PASSWORD_CORE_API}@redis:6379/0
+      PS_SECRETS_MASTER_KEYS: ${PS_SECRETS_MASTER_KEYS}
+      PS_ADMIN_TOKEN: ${PS_ADMIN_TOKEN:?}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8080/health')"]
+      interval: 15s
+    networks: [internal, edge]
+
+  # ------------------------------------------------------------------ pipeline
+  ingestor:
+    <<: *worker
+    command: ["pipstream", "run", "ingestor"]
+    environment:
+      PS_DATABASE_URL: *db_url
+      PS_REDIS_URL: redis://ingestor:${PS_REDIS_PASSWORD_INGESTOR}@redis:6379/0
+      PS_SECRETS_MASTER_KEYS: ${PS_SECRETS_MASTER_KEYS}
+      PS_TELEGRAM_API_ID: ${PS_TELEGRAM_API_ID:-}
+      PS_TELEGRAM_API_HASH: ${PS_TELEGRAM_API_HASH:-}
+      PS_INGESTOR_SOURCE: ${PS_INGESTOR_SOURCE:-replay}
+      PS_INGESTOR_REPLAY_FILE: config/replay/sample_posts.jsonl
+    healthcheck: &hc
+      test: ["CMD", "python", "-m", "pipstream.common.healthcheck", "ingestor"]
+      interval: 15s
+    networks: [internal, egress]     # outbound to Telegram only; no ports
+
+  parser:
+    <<: *worker
+    command: ["pipstream", "run", "parser"]
+    environment:
+      PS_DATABASE_URL: *db_url
+      PS_REDIS_URL: redis://parser:${PS_REDIS_PASSWORD_PARSER}@redis:6379/0
+    healthcheck: {<<: *hc, test: ["CMD", "python", "-m", "pipstream.common.healthcheck", "parser"]}
+    deploy: {replicas: 1}
+
+  risk-engine:
+    <<: *worker
+    command: ["pipstream", "run", "risk_engine"]
+    environment:
+      PS_DATABASE_URL: *db_url
+      PS_REDIS_URL: redis://risk_engine:${PS_REDIS_PASSWORD_RISK_ENGINE}@redis:6379/0
+      PS_INTENT_SIGNING_KEY: ${PS_INTENT_SIGNING_KEY:?}     # private key lives ONLY here
+      PS_INTENT_TTL_MS: ${PS_INTENT_TTL_MS:-5000}
+    healthcheck: {<<: *hc, test: ["CMD", "python", "-m", "pipstream.common.healthcheck", "risk_engine"]}
+
+  execution-router:
+    <<: *worker
+    command: ["pipstream", "run", "execution_router"]
+    environment:
+      PS_DATABASE_URL: *db_url
+      PS_REDIS_URL: redis://execution_router:${PS_REDIS_PASSWORD_EXECUTION_ROUTER}@redis:6379/0
+      PS_INTENT_VERIFY_KEY: ${PS_INTENT_VERIFY_KEY:?}       # public key only
+      PS_SECRETS_MASTER_KEYS: ${PS_SECRETS_MASTER_KEYS}     # decrypts broker creds in memory
+      PS_ROUTER_GLOBAL_MAX_LOT: ${PS_ROUTER_GLOBAL_MAX_LOT:-1.0}
+    healthcheck: {<<: *hc, test: ["CMD", "python", "-m", "pipstream.common.healthcheck", "execution_router"]}
+    networks: [internal, egress]     # outbound to brokers / bridges
+
+  position-tracker:
+    <<: *worker
+    command: ["pipstream", "run", "position_tracker"]
+    environment:
+      PS_DATABASE_URL: *db_url
+      PS_REDIS_URL: redis://position_tracker:${PS_REDIS_PASSWORD_POSITION_TRACKER}@redis:6379/0
+    healthcheck: {<<: *hc, test: ["CMD", "python", "-m", "pipstream.common.healthcheck", "position_tracker"]}
+
+  notifications:
+    <<: *worker
+    command: ["pipstream", "run", "notifications"]
+    environment:
+      PS_DATABASE_URL: *db_url
+      PS_REDIS_URL: redis://notifications:${PS_REDIS_PASSWORD_NOTIFICATIONS}@redis:6379/0
+      PS_TELEGRAM_BOT_TOKEN: ${PS_TELEGRAM_BOT_TOKEN:-}
+      PS_SMTP_URL: ${PS_SMTP_URL:-}
+      PS_SMTP_FROM: ${PS_SMTP_FROM:-}
+    healthcheck: {<<: *hc, test: ["CMD", "python", "-m", "pipstream.common.healthcheck", "notifications"]}
+    networks: [internal, egress]
+
+  billing:
+    <<: *worker
+    command: ["pipstream", "run", "billing"]
+    environment:
+      PS_DATABASE_URL: *db_url
+      PS_REDIS_URL: redis://billing:${PS_REDIS_PASSWORD_BILLING}@redis:6379/0
+      PS_BILLING_WEBHOOK_SECRETS: ${PS_BILLING_WEBHOOK_SECRETS:-}
+    healthcheck: {<<: *hc, test: ["CMD", "python", "-m", "pipstream.common.healthcheck", "billing"]}
+
+  # ------------------------------------------------------------------ optional: MT5 bridge
+  # docker compose --profile mt5 up -d mt5-bridge
+  # VERIFY the image before relying on it: it must run MT5 under Wine and serve the
+  # MetaTrader5 Python module over rpyc.classic on PS_MT5_PORT. Log in once via the
+  # web VNC on 127.0.0.1:3000, then set PS_MT5_* in .env and re-run `migrate`.
+  mt5-bridge:
+    profiles: [mt5]
+    image: ${PS_MT5_BRIDGE_IMAGE:-gmag11/metatrader5_vnc:latest}
+    restart: unless-stopped
+    ports: ["127.0.0.1:3000:3000"]
+    volumes: [mt5data:/config]
+    networks: [internal, egress]
+
+  # ------------------------------------------------------------------ helper
+  keys:        # docker compose run --rm keys  -> prints fresh secrets for .env
+    image: pipstream:local
+    profiles: [tools]
+    command: ["pipstream", "keys"]
+    network_mode: none
+
+networks:
+  internal: {internal: true}   # no internet; service-to-service only
+  egress: {}                   # outbound internet for ingestor / router / notifications
+  edge: {}                     # published port for core-api
+
+volumes:
+  pgdata: {}
+  redisdata: {}
+  redis-acl: {}
+  mt5data: {}

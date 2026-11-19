@@ -5,6 +5,8 @@ experiment** from the project handoff (§9): one VPS, Docker Compose, Postgres +
 Streams, rule-based parsing, paper / MT5-bridge / Deriv-demo execution.
 
 - How the services fit together: **[docs/architecture.md](docs/architecture.md)**
+
+![PipStream service map](docs/diagrams/service-map.png)
 - Channel / account / rule setup (no web app yet): [config/pipstream.yaml](config/pipstream.yaml)
 
 > Channel ids, house formats and the sample posts in `config/replay/` are **placeholders**.

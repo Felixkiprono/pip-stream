@@ -94,6 +94,13 @@ class EABridgeConnector:
         res = await self._run(cid, {"action": "close", "ticket": str(ticket), "volume": volume})
         return res.model_copy(update={"ticket": str(ticket)})
 
+    async def ping(self) -> OrderResult:
+        """Round trip to the terminal without trading (connection test)."""
+        return await self._run(f"p{int(self._clock() * 1000)}"[-20:], {"action": "ping"})
+
+    async def state(self) -> dict:
+        return await self._state()
+
     async def _state(self) -> dict:
         await self._require_online()
         raw = await self.redis.get(self._k("state"))

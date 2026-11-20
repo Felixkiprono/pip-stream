@@ -7,6 +7,7 @@ use App\Pipstream\Bus;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Str;
 
 /**
  * One endpoint the PipStream EA calls about once a second from the customer's terminal.
@@ -48,6 +49,57 @@ class EaController extends Controller
             ->where('enabled', true)->whereRaw("symbol_map->>'_ea_key_hash' = ?", [$hash])->value('id') ?? '');
 
         return $id ? BrokerAccount::where('id', $id)->where('enabled', true)->first() : null;
+    }
+
+    /**
+     * Pairing for an EA started without a key (no copy-paste for the customer):
+     *   first call (no token)  -> PAIR|<token>|<6-digit code>    the EA shows the code on the chart
+     *   later calls (token)    -> WAIT|<code>   until the customer types the code in the app,
+     *                          -> KEY|<psk_...> once, then the EA saves the key and starts syncing.
+     * Codes live 15 minutes. Only the EA holding the token can collect the key.
+     */
+    public function pair(Request $r)
+    {
+        $text = fn (string $s, int $code = 200) => response($s."\n", $code)->header('Content-Type', 'text/plain');
+        $token = preg_replace('/[^A-Za-z0-9]/', '', (string) $r->input('token', ''));
+        if ($token !== '' && ($p = Cache::get("ea-pair:{$token}"))) {
+            if (! empty($p['key'])) {
+                Cache::forget("ea-pair:{$token}");
+
+                return $text('KEY|'.$p['key']);
+            }
+
+            return $text('WAIT|'.$p['code']);
+        }
+        $info = fn (string $k, int $max) => mb_substr(preg_replace('/[|\r\n]/', '', (string) $r->input($k, '')), 0, $max);
+        do {
+            $code = (string) random_int(100000, 999999);
+        } while (Cache::has("ea-pair-code:{$code}"));
+        $token = Str::random(40);
+        Cache::put("ea-pair:{$token}", ['code' => $code, 'key' => null,
+            'platform' => $r->input('platform') === 'mt4' ? 'mt4' : 'mt5',
+            'login' => $info('login', 30), 'server' => $info('server', 80), 'company' => $info('company', 80)], now()->addMinutes(15));
+        Cache::put("ea-pair-code:{$code}", $token, now()->addMinutes(15));
+
+        return $text("PAIR|{$token}|{$code}");
+    }
+
+    /** The customer typed the code shown on their chart: create the account and hand the EA its key. */
+    public static function claimPairing(string $code): ?array
+    {
+        $token = Cache::get("ea-pair-code:{$code}");
+        $p = $token ? Cache::get("ea-pair:{$token}") : null;
+        if (! $p || ! empty($p['key'])) {
+            return null;
+        }
+        Cache::forget("ea-pair-code:{$code}");
+
+        return ['token' => $token] + $p;
+    }
+
+    public static function deliverKey(string $token, array $pairing, string $key): void
+    {
+        Cache::put("ea-pair:{$token}", ['key' => $key] + $pairing, now()->addMinutes(15));
     }
 
     public function sync(Request $r)

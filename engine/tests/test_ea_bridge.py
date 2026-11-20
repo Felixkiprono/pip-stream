@@ -156,3 +156,72 @@ async def test_only_the_executor_can_queue_ea_commands(acl_redis):
         await ex.set("ps:eares:bk9:r:abc", "x")  # the executor only reads answers
     await ex.aclose()
     await web.aclose()
+
+
+async def test_connection_test_and_demo_test_order(acl_redis, test_db, keys):
+    """'Test connection' + 'Test order' from the app, run by the executor against a stand-in EA."""
+    import time as _time
+
+    from redis.asyncio import Redis
+
+    from pipstream.common.db import create_pool, migrate
+    from pipstream.common.service import build_context, close_context
+    from pipstream.common.settings import Settings
+    from pipstream.services.execution_router.service import ExecutionRouter
+
+    pool = await create_pool(test_db)
+    await migrate(pool)
+    await pool.execute("insert into connectors (name, kind) values ('ea_bridge', 'cfd') on conflict do nothing")
+    await pool.execute("insert into users (id, email, name) values ('u1', 'a@b.c', 'A')")
+    await pool.execute("insert into broker_accounts (id, user_id, connector, label) values ('bk1', 'u1', 'ea_bridge', 'MT5')")
+
+    web = Redis.from_url(acl_redis["url"]("laravel"), decode_responses=True)  # plays the web app + EA
+    await web.set("ps:eares:bk1:seen", str(_time.time()))
+    state = {"balance": 10000, "equity": 10000, "currency": "USD", "trade_allowed": True, "demo": True, "positions": []}
+    await web.set("ps:eares:bk1:state", json.dumps(state))
+    await web.set("ps:eares:bk1:specs", json.dumps({"EURUSDm": {"point": 0.00001, "tick_size": 0.00001, "tick_value": 1,
+                                                                "volume_min": 0.01, "volume_step": 0.01}}))
+    seen_cmds = []
+
+    async def ea():
+        done = set()
+        while True:
+            for _id, f in reversed(await web.xrevrange("ps:acct:bk1:ea:cmd", "+", "-", count=20)):
+                c = json.loads(f["c"])
+                if c["id"] in done:
+                    continue
+                done.add(c["id"])
+                seen_cmds.append(c)
+                await web.set("ps:eares:bk1:seen", str(_time.time()))
+                await web.set(f"ps:eares:bk1:r:{c['id']}", json.dumps(
+                    {"ok": True, "ticket": "9001" if c["action"] == "open" else c.get("ticket"), "price": 1.0851}))
+            await asyncio.sleep(0.02)
+
+    s = Settings(redis_url=acl_redis["url"]("executor"), database_url=test_db, **keys)
+    c = await build_context("executor", s)
+    task = asyncio.create_task(ea())
+    try:
+        router = ExecutionRouter(c)
+        await router.run_test("bk1", "t1", order=False)
+        out = json.loads(await web.get("ps:acct:bk1:test:t1"))
+        assert out["state"] == "done" and out["ok"], out
+        assert [s["name"] for s in out["steps"]] == ["Terminal answered", "Account", "Algo Trading on"]
+        assert seen_cmds[0]["action"] == "ping"
+
+        await router.run_test("bk1", "t2", order=True)
+        out = json.loads(await web.get("ps:acct:bk1:test:t2"))
+        assert out["ok"], out
+        assert [c["action"] for c in seen_cmds[1:]] == ["ping", "open", "close"]
+        assert seen_cmds[2]["symbol"] == "EURUSDm" and seen_cmds[2]["volume"] == 0.01
+
+        # real-money accounts never get a test order
+        await web.set("ps:eares:bk1:state", json.dumps({**state, "demo": False}))
+        await router.run_test("bk1", "t3", order=True)
+        out = json.loads(await web.get("ps:acct:bk1:test:t3"))
+        assert not out["ok"] and "demo accounts only" in out["steps"][-1]["detail"]
+        assert [c["action"] for c in seen_cmds].count("open") == 1
+    finally:
+        task.cancel()
+        await close_context(c)
+        await web.aclose()
+        await pool.close()

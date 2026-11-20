@@ -3,6 +3,8 @@ import clsx from 'clsx'
 import { AlertTriangle, CheckCircle2, Cpu, FlaskConical, KeyRound, Loader2, Plus, Wallet, X } from 'lucide-react'
 import { useState } from 'react'
 import { Page } from '../../components/AppShell'
+import { BrokerTest } from '../../components/BrokerTest'
+import { EaPair } from '../../components/EaPair'
 import { EaSetup } from '../../components/EaSetup'
 import { Badge, Button, Card, ErrorNote, Spinner } from '../../components/ui'
 import { api, ApiError, del, post } from '../../lib/api'
@@ -21,6 +23,8 @@ export default function Brokers() {
   })
   const [adding, setAdding] = useState<Adding>(null)
   const [guide, setGuide] = useState<{ broker: Broker; key?: string | null } | null>(null)
+  const [testing, setTesting] = useState<string | null>(null)
+  const [useKey, setUseKey] = useState(false)
   const refresh = () => qc.invalidateQueries({ queryKey: ['brokers'] })
 
   return (
@@ -44,6 +48,9 @@ export default function Brokers() {
                   <Badge tone="brand">Practice</Badge>
                 ) : (
                   <span className="flex items-center gap-3">
+                    <button className="text-sm font-semibold text-brand" onClick={() => setTesting(testing === b.id ? null : b.id)}>
+                      Test
+                    </button>
                     {b.connector === 'ea_bridge' && (
                       <button className="text-sm font-semibold text-brand" onClick={() => setGuide({ broker: b })}>
                         Set up
@@ -60,6 +67,11 @@ export default function Brokers() {
                       Remove
                     </button>
                   </span>
+                )}
+                {testing === b.id && (
+                  <div className="w-full pl-13">
+                    <BrokerTest broker={b} />
+                  </div>
                 )}
               </li>
             ))}
@@ -97,16 +109,39 @@ export default function Brokers() {
 
       {adding === 'ea_bridge' ? (
         <Card>
-          <h2 className="mb-1 font-semibold">Connect MetaTrader with the PipStream EA</h2>
-          <p className="mb-4 text-sm text-ink-3">Free. Works with any broker. Your MetaTrader password never leaves your terminal.</p>
-          <EaAddForm
-            onCancel={() => setAdding(null)}
-            onCreated={(broker, key) => {
-              setAdding(null)
-              setGuide({ broker, key })
-              refresh()
-            }}
-          />
+          <div className="mb-4 flex items-start justify-between gap-3">
+            <div>
+              <h2 className="font-semibold">Connect MetaTrader</h2>
+              <p className="text-sm text-ink-3">Free, any broker. Your MetaTrader password never leaves your terminal.</p>
+            </div>
+            <button aria-label="Close" className="text-ink-3" onClick={() => setAdding(null)}>
+              <X className="size-5" />
+            </button>
+          </div>
+          {useKey ? (
+            <EaAddForm
+              onCancel={() => setUseKey(false)}
+              onCreated={(broker, key) => {
+                setAdding(null)
+                setUseKey(false)
+                setGuide({ broker, key })
+                refresh()
+              }}
+            />
+          ) : (
+            <>
+              <EaPair
+                onPaired={(broker) => {
+                  setAdding(null)
+                  setTesting(broker.id)
+                  refresh()
+                }}
+              />
+              <button className="mt-4 text-sm font-semibold text-ink-3 underline" onClick={() => setUseKey(true)}>
+                Prefer to paste a key into the EA instead?
+              </button>
+            </>
+          )}
         </Card>
       ) : adding ? (
         <Card>

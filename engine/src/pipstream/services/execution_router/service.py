@@ -226,6 +226,10 @@ class ExecutionRouter:
                 await asyncio.wait_for(self.c.stop.wait(), wait)
 
     async def on_config(self, ev: Event) -> None:
+        if ev.payload.get("entity") == "broker_test":
+            p = ev.payload
+            self._spawn(self.run_test(p.get("entity_id"), str(p.get("test_id", "")), bool(p.get("order"))))
+            return
         if ev.payload.get("entity") == "broker_account":
             account_id = ev.payload.get("entity_id")
             await self.pool.evict(account_id)
@@ -236,6 +240,99 @@ class ExecutionRouter:
         t = asyncio.create_task(coro)
         self._tasks.add(t)
         t.add_done_callback(self._tasks.discard)
+
+    async def run_test(self, account_id: str | None, test_id: str, order: bool) -> None:
+        """Customer pressed "Test connection" (and maybe "Test order"): check the round trip to
+        their broker or terminal and write each step to {p}:acct:{id}:test:{test_id} for the app.
+        A test order is only placed on DEMO accounts, at the smallest size, and closed at once."""
+        import json as _json
+        if not account_id or not test_id.isalnum():
+            return
+        key = f"{self.p}:acct:{account_id}:test:{test_id}"
+        steps: list[dict] = []
+        out: dict = {"state": "running", "steps": steps}
+
+        async def save(**kw) -> None:
+            out.update(kw)
+            await self.c.redis.set(key, _json.dumps(out, default=str), ex=600)
+
+        async def step(name: str, ok: bool, detail: str = "", ms: float | None = None) -> None:
+            steps.append({"name": name, "ok": ok, "detail": detail, "ms": None if ms is None else round(ms)})
+            await save()
+
+        await save()
+        try:
+            row = await self.c.db.fetchrow("select connector, enabled from broker_accounts where id = $1", account_id)
+            if row is None or not row["enabled"]:
+                await step("Account", False, "This broker account was removed")
+                return await save(state="done", ok=False)
+            name = row["connector"]
+            async with self.pool.lock(account_id):
+                t0 = time.monotonic()
+                try:
+                    conn = await self.pool.get(account_id, "paper" if name == "paper" else "live")
+                except Exception as e:
+                    await step("Connect", False, str(e))
+                    return await save(state="done", ok=False)
+                if name == "ea_bridge":
+                    t1 = time.monotonic()
+                    res = await conn.ping()
+                    if res.ok or (res.error or "").startswith("unknown action"):
+                        note = "" if res.ok else "terminal answered; download the latest EA for faster tests"
+                        await step("Terminal answered", True, note, (time.monotonic() - t1) * 1000)
+                    else:
+                        await step("Terminal answered", False, res.error or "no answer")
+                        return await save(state="done", ok=False)
+                else:
+                    h = await conn.health()
+                    await step("Broker connection", h.ok, h.detail, (time.monotonic() - t0) * 1000)
+                    if not h.ok:
+                        return await save(state="done", ok=False)
+                info = await conn.account_info([])
+                await step("Account", True, f"balance {info.balance:,.2f} {info.currency}")
+                state = {}
+                if name == "ea_bridge":
+                    state = await conn.state()
+                    allowed = bool(state.get("trade_allowed"))
+                    await step("Algo Trading on", allowed, "" if allowed else "turn on Algo Trading / AutoTrading in the toolbar")
+                    if not allowed:
+                        return await save(state="done", ok=False)
+                if order:
+                    if await self.c.redis.get(f"{self.p}:killswitch:global") == "1":
+                        await step("Test order", False, "copying is stopped by the kill switch")
+                        return await save(state="done", ok=False)
+                    if name != "paper" and not state.get("demo"):
+                        await step("Test order", False, "test orders run on demo accounts only")
+                        return await save(state="done", ok=False)
+                    await self._test_order(conn, account_id, step)
+            await save(state="done", ok=all(s["ok"] for s in steps))
+        except Exception as e:
+            self.c.log.warning("broker test failed", extra=ctx(account=account_id, error=repr(e)))
+            await step("Test", False, str(e) or repr(e))
+            await save(state="done", ok=False)
+
+    async def _test_order(self, conn, account_id: str, step) -> None:
+        from ...common.events import TradeIntent, utcnow
+        from datetime import timedelta
+        specs = (await conn.account_info(list(self.catalog.symbols))).symbols
+        pick = next((s for want in ("EURUSD", "XAUUSD", "GBPUSD", "USDJPY") for s in specs
+                     if s.upper().startswith(want)), next(iter(specs), None))
+        if pick is None:
+            return await step("Test order", False, "no tradable symbol reported by the terminal")
+        vol = specs[pick].volume_min
+        intent = TradeIntent(idempotency_key=f"test-{account_id}-{time.time_ns()}", user_id="test",
+                             broker_account_id=account_id, copy_rule_id="test", connector="test", mode="live",
+                             action="open", signal_id="test", channel_id="test", source_message_id=0, symbol=pick,
+                             side="buy", volume=vol, tp_index=0, expires_at=utcnow() + timedelta(seconds=10))
+        t0 = time.monotonic()
+        res = await conn.open(intent)
+        if not res.ok or not res.ticket:
+            return await step("Test order opened", False, res.error or "rejected")
+        await step("Test order opened", True, f"bought {vol:g} {pick} at {res.price or '?'} (ticket {res.ticket})",
+                   (time.monotonic() - t0) * 1000)
+        t1 = time.monotonic()
+        res2 = await conn.close(res.ticket)
+        await step("Test order closed", res2.ok, res2.error or f"ticket {res.ticket} closed", (time.monotonic() - t1) * 1000)
 
     async def setup_metaapi(self, account_id: str) -> None:
         """A MetaApi account was added or removed: create and start it at MetaApi (minutes, in

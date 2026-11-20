@@ -88,4 +88,45 @@ class EaBridgeTest extends TestCase
         $this->call('POST', '/ea/v1/sync', [], [], [], ['HTTP_X-PipStream-Key' => $key])->assertStatus(401);
         $this->call('POST', '/ea/v1/sync', [], [], [], ['HTTP_X-PipStream-Key' => $new])->assertOk();
     }
+
+    public function test_pairing_with_the_code_on_the_chart(): void
+    {
+        $ea = fn (array $body) => $this->call('POST', '/ea/v1/pair', [], [], [], ['CONTENT_TYPE' => 'application/json'], json_encode($body));
+        $first = $ea(['platform' => 'mt5', 'login' => '87654321', 'server' => 'Exness-MT5Trial8', 'company' => 'Exness'])->assertOk()->getContent();
+        $this->assertMatchesRegularExpression('/^PAIR\|[A-Za-z0-9]{40}\|\d{6}\n$/', $first);
+        [, $token, $code] = explode('|', trim($first));
+        $this->assertSame("WAIT|{$code}\n", $ea(['token' => $token])->getContent());
+
+        $u = $this->customer();
+        $this->actingAs($u)->postJson('/api/v1/brokers/pair', ['code' => '000000'])->assertStatus(422)->assertJsonValidationErrors('code');
+        $res = $this->postJson('/api/v1/brokers/pair', ['code' => $code])->assertOk();
+        $res->assertJsonPath('broker.connector', 'ea_bridge')->assertJsonPath('broker.label', 'MetaTrader 5 · Exness 87654321');
+        $this->actingAs($this->customer())->postJson('/api/v1/brokers/pair', ['code' => $code])->assertStatus(422);  // one use only
+        $this->actingAs($u);
+
+        // the EA collects its key once, and it works
+        $got = trim($ea(['token' => $token])->getContent());
+        $this->assertStringStartsWith('KEY|psk_', $got);
+        $key = substr($got, 4);
+        $this->assertSame(hash('sha256', $key), BrokerAccount::find($res->json('broker.id'))->symbol_map['_ea_key_hash']);
+        $this->call('POST', '/ea/v1/sync', [], [], [], ['HTTP_X-PipStream-Key' => $key])->assertOk();
+        $this->assertStringStartsWith('PAIR|', $ea(['token' => $token])->getContent());  // token spent
+    }
+
+    public function test_connection_test_is_handed_to_the_engine_and_read_back(): void
+    {
+        [$u, $broker] = $this->addEa();
+        $id = $broker['id'];
+        $tid = $this->actingAs($u)->postJson("/api/v1/brokers/{$id}/test")->assertOk()->json('test_id');
+        $ev = collect($this->streamEvents('config.changed'))->last();
+        $this->assertSame(['entity' => 'broker_test', 'entity_id' => $id, 'test_id' => $tid, 'order' => false], $ev['payload']);
+        $this->getJson("/api/v1/brokers/{$id}/test/{$tid}")->assertJsonPath('test.state', 'queued');
+
+        $this->redis()->set(config('pipstream.stream_prefix').":acct:{$id}:test:{$tid}", json_encode(['state' => 'done', 'ok' => true, 'steps' => [['name' => 'Terminal answered', 'ok' => true]]]));
+        $this->getJson("/api/v1/brokers/{$id}/test/{$tid}")->assertJsonPath('test.ok', true);
+
+        $this->postJson("/api/v1/brokers/{$id}/test", ['order' => true])->assertOk();
+        $this->postJson("/api/v1/brokers/{$id}/test", ['order' => true])->assertStatus(429);  // one test order a minute
+        $this->actingAs($this->customer())->postJson("/api/v1/brokers/{$id}/test")->assertNotFound();  // not yours
+    }
 }

@@ -1,16 +1,21 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { FlaskConical, Plus, Wallet } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, FlaskConical, Loader2, Plus, Wallet } from 'lucide-react'
 import { useState } from 'react'
 import { Page } from '../../components/AppShell'
 import { Badge, Button, Card, Spinner } from '../../components/ui'
 import { api, del } from '../../lib/api'
-import type { Broker } from '../../lib/types'
+import type { Broker, BrokerStatus } from '../../lib/types'
 import { BrokerForm } from '../onboarding/Broker'
 
 export default function Brokers() {
   const qc = useQueryClient()
-  const q = useQuery({ queryKey: ['brokers'], queryFn: () => api<{ brokers: Broker[] }>('brokers') })
-  const [adding, setAdding] = useState<null | 'mt5_bridge' | 'deriv_options'>(null)
+  const q = useQuery({
+    queryKey: ['brokers'],
+    queryFn: () => api<{ brokers: Broker[] }>('brokers'),
+    // while a MetaTrader account is starting up, check its status every few seconds
+    refetchInterval: (query) => (query.state.data?.brokers.some((b) => b.status?.state === 'connecting') ? 3000 : false),
+  })
+  const [adding, setAdding] = useState<null | 'metaapi' | 'deriv_options'>(null)
   return (
     <Page title="Brokers">
       {q.isLoading ? (
@@ -24,6 +29,7 @@ export default function Brokers() {
                 <span className="min-w-0 flex-1">
                   <span className="block font-semibold">{b.label}</span>
                   <span className="block text-sm text-ink-3">{b.connector === 'paper' ? '$10,000 practice money' : `Login ${b.login_hint ?? ''}`}</span>
+                  {b.status && <StatusLine s={b.status} />}
                 </span>
                 {b.connector === 'paper' ? (
                   <Badge tone="brand">Practice</Badge>
@@ -46,7 +52,7 @@ export default function Brokers() {
       )}
       {adding ? (
         <Card>
-          <h2 className="mb-3 font-semibold">{adding === 'mt5_bridge' ? 'Connect MetaTrader 5' : 'Connect Deriv'}</h2>
+          <h2 className="mb-3 font-semibold">{adding === 'metaapi' ? 'Connect MetaTrader 4 or 5' : 'Connect Deriv'}</h2>
           <BrokerForm
             kind={adding}
             onSaved={() => {
@@ -57,8 +63,8 @@ export default function Brokers() {
         </Card>
       ) : (
         <div className="grid grid-cols-2 gap-2">
-          <Button variant="soft" onClick={() => setAdding('mt5_bridge')}>
-            <Plus className="size-4" /> MetaTrader 5
+          <Button variant="soft" onClick={() => setAdding('metaapi')}>
+            <Plus className="size-4" /> MetaTrader 4/5
           </Button>
           <Button variant="soft" onClick={() => setAdding('deriv_options')}>
             <Plus className="size-4" /> Deriv
@@ -66,5 +72,25 @@ export default function Brokers() {
         </div>
       )}
     </Page>
+  )
+}
+
+function StatusLine({ s }: { s: BrokerStatus }) {
+  if (s.state === 'connected')
+    return (
+      <span className="mt-1 flex items-center gap-1.5 text-sm font-semibold text-up">
+        <CheckCircle2 className="size-4" /> Connected
+      </span>
+    )
+  if (s.state === 'error')
+    return (
+      <span className="mt-1 flex items-start gap-1.5 text-sm font-semibold text-down">
+        <AlertTriangle className="mt-0.5 size-4 shrink-0" /> {s.detail || 'Could not connect'}
+      </span>
+    )
+  return (
+    <span className="mt-1 flex items-center gap-1.5 text-sm text-ink-2">
+      <Loader2 className="size-4 animate-spin text-brand" /> {s.detail || 'Connecting'}
+    </span>
   )
 }

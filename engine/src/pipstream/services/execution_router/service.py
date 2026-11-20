@@ -41,7 +41,17 @@ class ConnectorPool:
     def lock(self, account_id: str) -> asyncio.Lock:
         return self._locks.setdefault(account_id, asyncio.Lock())
 
-    async def get(self, account_id: str, mode: str) -> Connector:
+    async def _provisioned(self, account_id: str, metaapi_id: str, platform: str) -> None:
+        """MetaApi now holds the password: keep only its account id (sealed) and remember the id
+        in symbol_map so the account can be deleted at MetaApi when the customer removes it."""
+        await self.c.db.execute(
+            "update broker_accounts set credentials_ciphertext = $2, "
+            "symbol_map = symbol_map || jsonb_build_object('_metaapi_id', $3::text), updated_at = now() "
+            "where id = $1", account_id, self.opener.seal({"account_id": metaapi_id, "platform": platform}),
+            metaapi_id)
+        self.c.log.info("metaapi account provisioned", extra=ctx(account=account_id, metaapi_id=metaapi_id))
+
+    async def get(self, account_id: str, mode: str, *, setup: bool = False) -> Connector:
         key = (account_id, mode)
         if key in self._pool:
             return self._pool[key]
@@ -58,9 +68,17 @@ class ConnectorPool:
                 if self.opener is None:
                     raise ConnectorError("PS_EXECUTOR_PRIVATE_KEY is not set; cannot open broker credentials")
                 creds = self.opener.open(row["credentials_ciphertext"])
+            extra = {}
+            if name == "metaapi":
+                async def on_prov(mid: str, platform: str, _acc=account_id) -> None:
+                    await self._provisioned(_acc, mid, platform)
+                # Trades never wait minutes for a terminal to start: only the background set-up
+                # task (setup=True) creates the MetaApi account and waits for it to connect.
+                extra = dict(settings=self.c.settings, on_provisioned=on_prov, provision=setup,
+                             connect_timeout_s=self.c.settings.metaapi_connect_timeout_s if setup else 3.0)
             conn = registry.create(name, redis=self.c.redis, account_id=account_id,
                                    prefix=self.c.settings.stream_prefix, catalog=self.catalog,
-                                   **self.factories.get(name, {}))
+                                   **{**extra, **self.factories.get(name, {})})
             await conn.connect(creds)
             del creds
             self._pool[key] = conn
@@ -84,6 +102,8 @@ class ExecutionRouter:
         self.catalog = SymbolCatalog.load(s.symbols_file)
         self.pool = ConnectorPool(c, opener, self.catalog, factories)
         self.p = s.stream_prefix
+        self._tasks: set[asyncio.Task] = set()
+        self._setting_up: set[str] = set()
 
     async def _kill_switch(self, user_id: str) -> bool:
         vals = await self.c.redis.mget(f"{self.p}:killswitch:global", f"{self.p}:killswitch:user:{user_id}")
@@ -183,7 +203,9 @@ class ExecutionRouter:
             try:
                 async with self.pool.lock(r["id"]):
                     conn = await self.pool.get(r["id"], mode)
-                    symbols = list((r["symbol_map"] or {}).values()) or list(self.catalog.symbols)
+                    # keys starting with "_" are account notes (login hint, platform, MetaApi id), not symbols
+                    mapped = [v for k, v in (r["symbol_map"] or {}).items() if not k.startswith("_")]
+                    symbols = mapped or list(self.catalog.symbols)
                     info = await conn.account_info(symbols)
                     positions = await conn.positions()
             except Exception as e:
@@ -205,11 +227,56 @@ class ExecutionRouter:
 
     async def on_config(self, ev: Event) -> None:
         if ev.payload.get("entity") == "broker_account":
-            await self.pool.evict(ev.payload.get("entity_id"))
+            account_id = ev.payload.get("entity_id")
+            await self.pool.evict(account_id)
+            if account_id:
+                self._spawn(self.setup_metaapi(account_id))
+
+    def _spawn(self, coro) -> None:
+        t = asyncio.create_task(coro)
+        self._tasks.add(t)
+        t.add_done_callback(self._tasks.discard)
+
+    async def setup_metaapi(self, account_id: str) -> None:
+        """A MetaApi account was added or removed: create and start it at MetaApi (minutes, in
+        the background) so the first signal finds it connected, or delete it there."""
+        row = await self.c.db.fetchrow("select connector, enabled, credentials_ciphertext, symbol_map "
+                                       "from broker_accounts where id = $1", account_id)
+        if row is None or row["connector"] != "metaapi":
+            return
+        if not row["enabled"]:
+            mid = (row["symbol_map"] or {}).get("_metaapi_id")
+            if mid:
+                from .connectors.metaapi import remove_account
+                try:
+                    await remove_account(self.c.settings, mid,
+                                         transport=self.pool.factories.get("metaapi", {}).get("transport"))
+                    self.c.log.info("metaapi account removed", extra=ctx(account=account_id, metaapi_id=mid))
+                except Exception as e:
+                    self.c.log.warning("metaapi remove failed", extra=ctx(account=account_id, error=repr(e)))
+            return
+        if account_id in self._setting_up:
+            return
+        self._setting_up.add(account_id)
+        try:
+            async with self.pool.lock(account_id):
+                await self.pool.get(account_id, "live", setup=True)
+        except Exception as e:
+            self.c.log.warning("metaapi set-up did not finish", extra=ctx(account=account_id, error=repr(e)))
+            await self.pool.evict(account_id)
+        finally:
+            self._setting_up.discard(account_id)
+
+    async def resume_setups(self) -> None:
+        """After a restart, finish setting up MetaApi accounts that were added but never connected."""
+        rows = await self.c.db.fetch("select id from broker_accounts where enabled and connector = 'metaapi'")
+        for r in rows:
+            self._spawn(self.setup_metaapi(r["id"]))
 
 
 async def main(c: Context) -> None:
     router = ExecutionRouter(c)
+    await router.resume_setups()
     await router.snapshot_once()
     await asyncio.gather(
         c.bus.subscribe([Topic.TRADE_INTENT], router.handle, consumer=c.consumer, claim_idle_ms=2000),

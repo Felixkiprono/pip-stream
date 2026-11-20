@@ -100,6 +100,7 @@ services:
       PS_INTENT_SIGNING_KEY: ${PS_INTENT_SIGNING_KEY:?}
       PS_INTENT_VERIFY_KEY: ${PS_INTENT_VERIFY_KEY:?}
       PS_EXECUTOR_PRIVATE_KEY: ${PS_EXECUTOR_PRIVATE_KEY:?}
+      PS_METAAPI_TOKEN: ${PS_METAAPI_TOKEN:-}
     depends_on:
       postgres: {condition: service_healthy}
       redis: {condition: service_healthy}

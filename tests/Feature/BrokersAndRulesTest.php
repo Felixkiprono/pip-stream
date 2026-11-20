@@ -30,6 +30,32 @@ class BrokersAndRulesTest extends TestCase
         $this->assertSame('broker_account', $this->streamEvents('config.changed')[0]['payload']['entity']);
     }
 
+    public function test_metatrader_via_metaapi_is_sealed_and_shows_connection_status(): void
+    {
+        $u = $this->customer();
+        $res = $this->actingAs($u)->postJson('/api/v1/brokers', ['connector' => 'metaapi', 'platform' => 'mt4',
+            'login' => ' 51234567 ', 'password' => 'Hunter2-Secret!', 'server' => 'Exness-MT4Trial7']);
+        $res->assertOk()->assertJsonPath('broker.label', 'MetaTrader 4 · Exness-MT4Trial7')
+            ->assertJsonPath('broker.platform', 'mt4')->assertJsonPath('broker.connected', false)
+            ->assertJsonPath('broker.status.state', 'connecting');
+        $this->assertStringNotContainsString('Hunter2', $res->getContent());
+
+        $b = BrokerAccount::find($res->json('broker.id'));
+        $plain = sodium_crypto_box_seal_open(base64_decode(substr($b->credentials_ciphertext, 4)), $this->executorSecret);
+        $this->assertSame(['login' => '51234567', 'password' => 'Hunter2-Secret!', 'server' => 'Exness-MT4Trial7',
+            'platform' => 'mt4'], json_decode($plain, true));
+
+        // the engine reports progress in redis; the app shows it
+        app(\App\Pipstream\Bus::class)->redis()->client()->set(config('pipstream.stream_prefix').":acct:{$b->id}:status",
+            json_encode(['state' => 'connected', 'detail' => 'MT4 account connected']));
+        $this->getJson('/api/v1/brokers')->assertJsonPath('brokers.1.connected', true)
+            ->assertJsonPath('brokers.1.status.state', 'connected');
+        $this->getJson("/api/v1/brokers/{$b->id}")->assertJsonPath('broker.status.detail', 'MT4 account connected');
+
+        $this->postJson('/api/v1/brokers', ['connector' => 'metaapi', 'login' => '1', 'password' => 'x', 'server' => 's'])
+            ->assertStatus(422)->assertJsonValidationErrors('platform');
+    }
+
     public function test_plan_limits_broker_count(): void
     {
         $u = $this->customer();   // trial: 1 real broker

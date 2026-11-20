@@ -51,7 +51,7 @@ def split_tps(total: float, n_tps: int, spec: SymbolSpec, mode: str = "equal") -
 def resolve_symbol(canonical: str, symbol_map: dict, available: set[str] | None) -> str | None:
     """Canonical -> broker symbol. Explicit map wins; else exact; else a broker suffix
     variant (XAUUSD.m, XAUUSDm, XAUUSD-ECN)."""
-    if canonical in (symbol_map or {}):
+    if canonical in (symbol_map or {}) and not canonical.startswith("_"):
         return symbol_map[canonical]
     if not available:
         return canonical

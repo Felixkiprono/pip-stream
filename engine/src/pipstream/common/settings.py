@@ -55,6 +55,13 @@ class Settings(BaseModel):
     router_global_max_lot: float = 5.0
     router_snapshot_interval_s: float = 30.0
 
+    # MetaApi (hosted MT4/MT5 terminals, metaapi.cloud). Token: executor only.
+    metaapi_token: str | None = None
+    metaapi_provisioning_url: str | None = None   # default: MetaApi's public provisioning API
+    metaapi_client_url: str | None = None         # default: https://mt-client-api-v1.{region}.agiliumtrade.ai
+    metaapi_region: str | None = None             # fallback when the account reports none
+    metaapi_connect_timeout_s: float = 240.0      # how long set-up waits for the terminal to connect
+
     # Schema (owned by Laravel; Python reads the same SQL file for tests and dev)
     schema_file: str | None = None
 

@@ -6,16 +6,16 @@ import { useNavigate } from 'react-router'
 import { Badge, Button, ErrorNote, Field, Step } from '../../components/ui'
 import { ApiError, post } from '../../lib/api'
 
-type Kind = 'paper' | 'mt5_bridge' | 'deriv_options'
+type Kind = 'paper' | 'metaapi' | 'mt5_bridge' | 'deriv_options'
 
 const OPTIONS: { id: Kind; title: string; blurb: string; tag?: string }[] = [
   { id: 'paper', title: 'Practice money', blurb: 'A $10,000 practice account. Every signal is copied, nothing is real.', tag: 'Recommended to start' },
-  { id: 'mt5_bridge', title: 'MetaTrader 5', blurb: 'Exness, IC Markets, XM, HFM and any broker on MT5.' },
+  { id: 'metaapi', title: 'MetaTrader 4 or 5', blurb: 'Exness, IC Markets, XM, HFM and any broker on MT4 or MT5.' },
   { id: 'deriv_options', title: 'Deriv', blurb: 'Rise/Fall and other options with your Deriv API token.' },
 ]
 
 export function BrokerForm({ kind, onSaved }: { kind: Exclude<Kind, 'paper'>; onSaved: () => void }) {
-  const [f, setF] = useState({ login: '', password: '', server: '', token: '' })
+  const [f, setF] = useState({ login: '', password: '', server: '', token: '', platform: 'mt5' as 'mt4' | 'mt5' })
   const [err, setErr] = useState<ApiError | null>(null)
   const [busy, setBusy] = useState(false)
   async function save(e: React.FormEvent) {
@@ -23,8 +23,15 @@ export function BrokerForm({ kind, onSaved }: { kind: Exclude<Kind, 'paper'>; on
     setBusy(true)
     setErr(null)
     try {
-      await post('brokers', kind === 'mt5_bridge' ? { connector: kind, login: f.login, password: f.password, server: f.server } : { connector: kind, token: f.token })
-      setF({ login: '', password: '', server: '', token: '' })
+      await post(
+        'brokers',
+        kind === 'metaapi'
+          ? { connector: kind, platform: f.platform, login: f.login.trim(), password: f.password, server: f.server.trim() }
+          : kind === 'mt5_bridge'
+            ? { connector: kind, login: f.login, password: f.password, server: f.server }
+            : { connector: kind, token: f.token },
+      )
+      setF({ login: '', password: '', server: '', token: '', platform: 'mt5' })
       onSaved()
     } catch (e) {
       setErr(e as ApiError)
@@ -34,7 +41,35 @@ export function BrokerForm({ kind, onSaved }: { kind: Exclude<Kind, 'paper'>; on
   }
   return (
     <form onSubmit={save} className="anim-rise space-y-3">
-      {kind === 'mt5_bridge' ? (
+      {kind === 'metaapi' ? (
+        <>
+          <div className="grid grid-cols-2 gap-2 rounded-2xl bg-surface-2 p-1" role="radiogroup" aria-label="Platform">
+            {(['mt4', 'mt5'] as const).map((p) => (
+              <button
+                key={p}
+                type="button"
+                role="radio"
+                aria-checked={f.platform === p}
+                onClick={() => setF({ ...f, platform: p })}
+                className={clsx('min-h-11 rounded-xl text-sm font-semibold', f.platform === p ? 'bg-surface text-ink shadow-card' : 'text-ink-3')}
+              >
+                MetaTrader {p === 'mt4' ? '4' : '5'}
+              </button>
+            ))}
+          </div>
+          <Field label="Account number" inputMode="numeric" autoComplete="off" value={f.login} onChange={(e) => setF({ ...f, login: e.target.value })} error={err?.field('login')} />
+          <Field label="Trading password" type="password" autoComplete="off" value={f.password} onChange={(e) => setF({ ...f, password: e.target.value })} error={err?.field('password')} hint="Not the investor (read-only) password." />
+          <Field
+            label="Server"
+            placeholder={f.platform === 'mt4' ? 'e.g. Exness-MT4Trial7' : 'e.g. Exness-MT5Trial8'}
+            autoComplete="off"
+            value={f.server}
+            onChange={(e) => setF({ ...f, server: e.target.value })}
+            error={err?.field('server')}
+            hint="Exactly as your broker shows it: in MetaTrader under your account, or in your broker's account area."
+          />
+        </>
+      ) : kind === 'mt5_bridge' ? (
         <>
           <Field label="MT5 login number" inputMode="numeric" autoComplete="off" value={f.login} onChange={(e) => setF({ ...f, login: e.target.value })} error={err?.field('login')} />
           <Field label="Trading password" type="password" autoComplete="off" value={f.password} onChange={(e) => setF({ ...f, password: e.target.value })} error={err?.field('password')} hint="Not the investor (read-only) password." />
@@ -56,10 +91,13 @@ export function BrokerForm({ kind, onSaved }: { kind: Exclude<Kind, 'paper'>; on
       )}
       {err && !Object.keys(err.errors).length && <ErrorNote>{err.message}</ErrorNote>}
       <p className="flex gap-2 text-sm text-ink-3">
-        <Lock className="size-4 shrink-0" /> Locked the moment you save it. Only the trading engine can open it, not the website or PipStream staff.
+        <Lock className="size-4 shrink-0" />
+        {kind === 'metaapi'
+          ? 'Locked the moment you save it and handed once to the hosted MetaTrader terminal. PipStream does not keep your password.'
+          : 'Locked the moment you save it. Only the trading engine can open it, not the website or PipStream staff.'}
       </p>
       <Button type="submit" block busy={busy}>
-        Connect {kind === 'mt5_bridge' ? 'MetaTrader 5' : 'Deriv'}
+        Connect {kind === 'metaapi' ? `MetaTrader ${f.platform === 'mt4' ? '4' : '5'}` : kind === 'mt5_bridge' ? 'MetaTrader 5' : 'Deriv'}
       </Button>
     </form>
   )
@@ -103,7 +141,10 @@ export default function Broker() {
               <div className="mt-4 border-t border-line pt-4">
                 {saved ? (
                   <p className="flex items-center gap-2 font-semibold text-up">
-                    <Check className="size-5" /> Connected. Copies stay watch-only until you turn on live trading.
+                    <Check className="size-5" />
+                    {o.id === 'metaapi'
+                      ? 'Saved. Your MetaTrader account is connecting, which takes a minute or two. Check it under Brokers.'
+                      : 'Connected. Copies stay watch-only until you turn on live trading.'}
                   </p>
                 ) : (
                   <BrokerForm

@@ -52,7 +52,8 @@ Site: *Use repository docker-compose.yml*, ingress service **nginx**, port **80*
 - Build commands: `php: composer install --no-dev --optimize-autoloader`, `node: npm ci && npm run build`
 - Release commands: `php: php artisan migrate --force`, `php: php artisan optimize`, `php: php artisan queue:restart`
 - Site-root `.env`: the output of `pipstream keys` (run it once in the engine container), plus
-  `PS_APP_DIR=./src`, `PS_TELEGRAM_API_ID` and `PS_TELEGRAM_API_HASH`
+  `PS_APP_DIR=./src`, `PS_TELEGRAM_API_ID`, `PS_TELEGRAM_API_HASH` and `PS_METAAPI_TOKEN` (MT4/MT5 accounts
+  through MetaApi; token at https://app.metaapi.cloud/token)
 - `src/.env`: Laravel settings from `.env.example` (APP_KEY, Paystack, bot token, mail)
 
 `docker-compose.yml` shows what runs where. Architecture notes are in `docs/architecture.md`.

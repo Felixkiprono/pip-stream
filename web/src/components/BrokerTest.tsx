@@ -8,12 +8,15 @@ type Step = { name: string; ok: boolean; detail?: string; ms?: number | null }
 type Test = { state: 'queued' | 'running' | 'done'; ok?: boolean; steps: Step[] }
 
 /** "Test connection" and, on demo accounts, "Test order": the engine runs the test, we show each step. */
-export function BrokerTest({ broker }: { broker: Broker }) {
+export function BrokerTest({ broker, auto }: { broker: Broker; auto?: boolean }) {
   const [test, setTest] = useState<Test | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const [busy, setBusy] = useState<null | 'conn' | 'order'>(null)
   const timer = useRef<number | null>(null)
   useEffect(() => () => void (timer.current && window.clearTimeout(timer.current)), [])
+  // straight after linking, check the connection without making the customer press anything
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => void (auto && run(false)), [])
   const demo = broker.connector === 'paper' || broker.status?.account?.demo === true
 
   async function run(order: boolean) {

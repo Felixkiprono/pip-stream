@@ -51,6 +51,30 @@ class EaController extends Controller
         return $id ? BrokerAccount::where('id', $id)->where('enabled', true)->first() : null;
     }
 
+    /** Where the EA should call: PS_EA_URL, else the address the customer is using right now. */
+    public static function eaUrl(Request $r): string
+    {
+        return rtrim((string) (config('pipstream.ea_url') ?: $r->getSchemeAndHttpHost()), '/');
+    }
+
+    /** The EA source with the server address preset, so the customer never has to type it. */
+    public function download(Request $r, string $ext)
+    {
+        $src = file_get_contents(resource_path("ea/PipStream.{$ext}"));
+        $url = self::eaUrl($r);
+        $src = preg_replace('/input string PipStreamUrl = "[^"]*";/', 'input string PipStreamUrl = "'.addcslashes($url, '"\\').'";', $src, 1);
+
+        return response($src)->header('Content-Type', 'text/plain; charset=utf-8')
+            ->header('Content-Disposition', "attachment; filename=\"PipStream.{$ext}\"")
+            ->header('Cache-Control', 'no-store');
+    }
+
+    /** "Has a MetaTrader reached us from where you are?" so the app can say what's happening before the code is typed. */
+    public static function seenFrom(string $ip): ?array
+    {
+        return Cache::get('ea-pair-ip:'.hash('sha256', $ip));
+    }
+
     /**
      * Pairing for an EA started without a key (no copy-paste for the customer):
      *   first call (no token)  -> PAIR|<token>|<6-digit code>    the EA shows the code on the chart
@@ -69,6 +93,8 @@ class EaController extends Controller
                 return $text('KEY|'.$p['key']);
             }
 
+            $this->markSeen($r, $p);
+
             return $text('WAIT|'.$p['code']);
         }
         $info = fn (string $k, int $max) => mb_substr(preg_replace('/[|\r\n]/', '', (string) $r->input($k, '')), 0, $max);
@@ -80,8 +106,15 @@ class EaController extends Controller
             'platform' => $r->input('platform') === 'mt4' ? 'mt4' : 'mt5',
             'login' => $info('login', 30), 'server' => $info('server', 80), 'company' => $info('company', 80)], now()->addMinutes(15));
         Cache::put("ea-pair-code:{$code}", $token, now()->addMinutes(15));
+        $this->markSeen($r);
 
         return $text("PAIR|{$token}|{$code}");
+    }
+
+    private function markSeen(Request $r, ?array $p = null): void
+    {
+        $p ??= ['platform' => $r->input('platform') === 'mt4' ? 'mt4' : 'mt5', 'company' => mb_substr((string) $r->input('company', ''), 0, 80)];
+        Cache::put('ea-pair-ip:'.hash('sha256', (string) $r->ip()), ['platform' => $p['platform'], 'company' => $p['company'], 'at' => time()], now()->addMinutes(15));
     }
 
     /** The customer typed the code shown on their chart: create the account and hand the EA its key. */

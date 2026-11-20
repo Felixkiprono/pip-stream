@@ -129,4 +129,23 @@ class EaBridgeTest extends TestCase
         $this->postJson("/api/v1/brokers/{$id}/test", ['order' => true])->assertStatus(429);  // one test order a minute
         $this->actingAs($this->customer())->postJson("/api/v1/brokers/{$id}/test")->assertNotFound();  // not yours
     }
+
+    public function test_ea_download_carries_the_address_it_was_downloaded_from(): void
+    {
+        $res = $this->get('http://127.0.0.1:8000/ea/PipStream.mq5')->assertOk();
+        $this->assertStringContainsString('input string PipStreamUrl = "http://127.0.0.1:8000";', $res->getContent());
+        $this->assertStringContainsString('attachment; filename="PipStream.mq5"', $res->headers->get('Content-Disposition'));
+
+        config(['pipstream.ea_url' => 'https://pip.stream/']);
+        $this->assertStringContainsString('input string PipStreamUrl = "https://pip.stream";', $this->get('/ea/PipStream.mq4')->getContent());
+        $this->get('/ea/PipStream.ex9')->assertDontSee('input string');
+    }
+
+    public function test_pair_status_says_when_a_terminal_from_here_has_reached_us(): void
+    {
+        $this->actingAs($this->customer());
+        $this->getJson('/api/v1/brokers/pair/status')->assertOk()->assertJsonPath('seen', null);
+        $this->call('POST', '/ea/v1/pair', [], [], [], ['CONTENT_TYPE' => 'application/json'], json_encode(['platform' => 'mt5', 'company' => 'Exness']))->assertOk();
+        $this->getJson('/api/v1/brokers/pair/status')->assertJsonPath('seen.company', 'Exness')->assertJsonPath('seen.platform', 'mt5');
+    }
 }

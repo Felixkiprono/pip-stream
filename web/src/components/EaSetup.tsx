@@ -3,11 +3,13 @@ import { AlertTriangle, Check, CheckCircle2, Copy, Download, Loader2 } from 'luc
 import { useState } from 'react'
 import { api } from '../lib/api'
 import type { Broker } from '../lib/types'
+import { Troubleshoot, useElapsed, usePairStatus } from './EaPair'
 
 /** Step-by-step install of the PipStream EA, with the key (shown once) and live status. */
 export function EaSetup({ broker, eaKey }: { broker: Broker; eaKey?: string | null }) {
   const mt = broker.platform === 'mt4' ? 4 : 5
-  const origin = window.location.origin
+  const eaUrl = usePairStatus(false).data?.ea_url ?? window.location.origin
+  const waited = useElapsed()
   const q = useQuery({
     queryKey: ['broker', broker.id],
     queryFn: () => api<{ broker: Broker }>(`brokers/${broker.id}`),
@@ -37,18 +39,12 @@ export function EaSetup({ broker, eaKey }: { broker: Broker; eaKey?: string | nu
             <b>Tools → Options → Expert Advisors</b>: tick <b>Allow {mt === 4 ? 'automated trading' : 'algorithmic trading'}</b> and{' '}
             <b>Allow WebRequest for listed URL</b>, then add this address:
           </p>
-          <CopyRow value={origin} />
+          <CopyRow value={eaUrl} />
         </Li>
         <Li n={3} title="Put it on one chart and paste your key">
           <p className="text-sm text-ink-2">
-            Drag <b>PipStream</b> from the Navigator onto any chart (just one). In <b>Inputs</b>, paste your key into <b>PipStreamKey</b>
-            {origin !== 'https://pip.stream' && (
-              <>
-                {' '}
-                and set <b>PipStreamUrl</b> to <b>{origin}</b>
-              </>
-            )}
-            . Make sure <b>{mt === 4 ? 'AutoTrading' : 'Algo Trading'}</b> is on in the toolbar.
+            Drag <b>PipStream</b> from the Navigator onto any chart (just one). In <b>Inputs</b>, paste your key into the first box (the server address
+            is already filled in). Make sure <b>{mt === 4 ? 'AutoTrading' : 'Algo Trading'}</b> is on in the toolbar.
           </p>
           {eaKey ? (
             <>
@@ -87,9 +83,10 @@ export function EaSetup({ broker, eaKey }: { broker: Broker; eaKey?: string | nu
           </p>
         ) : (
           <p className="flex items-center gap-2 text-sm text-ink-2">
-            <Loader2 className="size-4 animate-spin text-brand" /> Waiting for your terminal to check in…
+            <Loader2 className="size-4 animate-spin text-brand" /> Waiting for your terminal to check in at {eaUrl}…
           </p>
         )}
+        {st?.state !== 'connected' && waited > 20 && <Troubleshoot mt={mt} eaUrl={eaUrl} />}
       </div>
     </div>
   )

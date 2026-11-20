@@ -24,6 +24,7 @@ export default function Brokers() {
   const [adding, setAdding] = useState<Adding>(null)
   const [guide, setGuide] = useState<{ broker: Broker; key?: string | null } | null>(null)
   const [testing, setTesting] = useState<string | null>(null)
+  const [justPaired, setJustPaired] = useState<string | null>(null)
   const [useKey, setUseKey] = useState(false)
   const refresh = () => qc.invalidateQueries({ queryKey: ['brokers'] })
 
@@ -70,7 +71,7 @@ export default function Brokers() {
                 )}
                 {testing === b.id && (
                   <div className="w-full pl-13">
-                    <BrokerTest broker={b} />
+                    <BrokerTest broker={b} auto={justPaired === b.id} />
                   </div>
                 )}
               </li>
@@ -134,6 +135,7 @@ export default function Brokers() {
                 onPaired={(broker) => {
                   setAdding(null)
                   setTesting(broker.id)
+                  setJustPaired(broker.id)
                   refresh()
                 }}
               />

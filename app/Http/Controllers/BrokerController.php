@@ -101,6 +101,15 @@ class BrokerController extends Controller
         return ['broker' => $this->present($b)];
     }
 
+    /** Live help while pairing: the address the EA must reach, and whether a MetaTrader from here already reached it. */
+    public function pairStatus(Request $r)
+    {
+        $seen = EaController::seenFrom((string) $r->ip());
+
+        return ['ea_url' => EaController::eaUrl($r),
+            'seen' => $seen && time() - $seen['at'] < 30 ? ['platform' => $seen['platform'], 'company' => $seen['company']] : null];
+    }
+
     /** "Test connection" (and on demo accounts "Test order"): the engine runs it and writes each step. */
     public function test(Request $r, BrokerAccount $broker, Bus $bus)
     {

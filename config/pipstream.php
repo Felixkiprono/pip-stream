@@ -12,6 +12,9 @@ return [
     'executor_public_key' => env('PS_EXECUTOR_PUBLIC_KEY'),
 
     // Engine's internal HTTP (parse preview). Private compose network only.
+    // The address the PipStream EA calls. Empty: the address the customer downloaded it from.
+    'ea_url' => env('PS_EA_URL'),
+
     'engine_url' => env('PS_ENGINE_URL', 'http://engine:8001'),
 
     // How long a web request waits for the engine to answer a Telegram login step

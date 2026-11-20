@@ -14,6 +14,7 @@ import Plan from './screens/onboarding/Plan'
 import Style from './screens/onboarding/Style'
 import { TgCode, TgLinked, TgPassword, TgPhone } from './screens/onboarding/Telegram'
 import Welcome from './screens/onboarding/Welcome'
+import Landing from './screens/Landing'
 import AlertsScreen from './screens/app/Alerts'
 import BillingScreen from './screens/app/Billing'
 import BrokersScreen from './screens/app/Brokers'
@@ -51,7 +52,8 @@ export default function App() {
   return (
     <Suspense fallback={<Spinner />}>
       <Routes>
-        <Route path="/" element={<Welcome />} />
+        <Route path="/" element={<Landing />} />
+        <Route path="/welcome" element={<Welcome />} />
         <Route path="/signup" element={<Auth mode="signup" />} />
         <Route path="/login" element={<Auth mode="login" />} />
 

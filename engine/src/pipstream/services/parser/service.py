@@ -17,6 +17,7 @@ from .engine import ParserProfile, SignalParser, SymbolCatalog
 
 class ParserService:
     def __init__(self, c: Context):
+        self.on_result = None  # optional async hook(msg, signal, rejected), e.g. dev confirmations
         self.c = c
         self.parser = SignalParser(SymbolCatalog.load(c.settings.symbols_file))
         self.profiles: dict[str, ParserProfile] = {}
@@ -37,7 +38,7 @@ class ParserService:
         self.c.log.info("parser profiles loaded", extra=ctx(channels=len(profiles)))
 
     async def on_config(self, ev: Event) -> None:
-        if ev.payload.get("entity") in ("channel", "parser_profile"):
+        if ev.payload.get("entity") in ("channel", "channel_reader", "parser_profile"):
             await self.load_profiles()
 
     async def handle(self, ev: Event) -> None:
@@ -58,6 +59,11 @@ class ParserService:
             await self._emit_parsed(res.signal, ev.trace_id)
         else:
             await self._emit_rejected(res.rejected, ev.trace_id)
+        if self.on_result:
+            try:
+                await self.on_result(msg, res.signal, res.rejected)
+            except Exception:
+                self.c.log.exception("on_result hook failed", extra=ctx(trace_id=ev.trace_id))
 
     async def _emit_parsed(self, sig: ParsedSignal, trace_id: str) -> None:
         row = await self.c.db.fetchrow(

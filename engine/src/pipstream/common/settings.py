@@ -43,6 +43,7 @@ class Settings(BaseModel):
     ingestor_shard: int = 0
     ingestor_shards: int = 1
     ingestor_lease_ttl_ms: int = 15_000
+    ingestor_confirm_to_saved: bool = False  # post "PipStream read ..." to the reader's Saved Messages
     ingestor_fake_telegram: bool = False  # dev only: web logins accept code 12345 (11111 -> 2FA "demo")
 
     # Router

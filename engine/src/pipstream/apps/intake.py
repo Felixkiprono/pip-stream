@@ -30,6 +30,14 @@ async def main(c: Context, *, http: bool = True, client_factory=None) -> None:
         c.log.warning("fake Telegram enabled: web logins accept code 12345")
     login = LoginFlow(c, client_factory=client_factory, on_linked=relink)
 
+    if c.settings.ingestor_confirm_to_saved:
+        if c.settings.env == "production":
+            raise SystemExit("PS_INGESTOR_CONFIRM_TO_SAVED is a local testing aid; do not set it in production")
+
+        async def confirm(msg, signal, rejected):
+            await ing.confirm(msg.telegram_account_id, confirmation_text(msg, signal, rejected))
+        par.on_result = confirm
+
     async def on_config(ev):
         await ing.on_config(ev)
         await par.on_config(ev)
@@ -51,6 +59,30 @@ async def main(c: Context, *, http: bool = True, client_factory=None) -> None:
     if http:
         tasks.append(serve_preview(c, par))
     await asyncio.gather(*tasks)
+
+
+def confirmation_text(msg, signal, rejected) -> str:
+    """What intake writes to Saved Messages when PS_INGESTOR_CONFIRM_TO_SAVED is on."""
+    where = f"chat {msg.tg_chat_id}, message {msg.message_id}" + (" (edited)" if msg.edit_version else "")
+    if signal is None:
+        reason = rejected.reason if rejected else "unknown"
+        return f"PipStream read a post but did not treat it as a signal ({reason}).\n{where}"
+    parts = [f"{signal.kind.upper()} {signal.side.upper() if signal.side else ''} {signal.symbol or ''}".split()]
+    line = " ".join(parts[0])
+    e = signal.entry
+    if e and e.type == "range":
+        line += f" {e.from_:g}-{e.to:g}"
+    elif e and e.price is not None:
+        line += f" @ {e.price:g}"
+    if signal.sl is not None:
+        line += f" · SL {signal.sl:g}"
+    if signal.tps:
+        line += " · TP " + " / ".join(f"{t:g}" for t in signal.tps)
+    if signal.move_sl_to_entry:
+        line += " · move SL to entry"
+    if signal.close_fraction:
+        line += f" · close {signal.close_fraction:.0%}"
+    return f"PipStream read a signal: {line} (confidence {signal.confidence:.2f}).\n{where}"
 
 
 if __name__ == "__main__":

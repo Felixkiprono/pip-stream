@@ -121,6 +121,11 @@ class IngestorService:
         for acc_id in list(self.sources):
             await self._stop_session(acc_id)
 
+    async def confirm(self, account_id: str, text: str) -> None:
+        src = self.sources.get(account_id)
+        if src is not None and hasattr(src, "send_to_saved"):
+            await src.send_to_saved(text)
+
     # ------------------------------------------------------------------ posts
     async def on_post(self, account_id: str, post: RawPost) -> None:
         channel_id = self.chat_to_channel.get(post.tg_chat_id)

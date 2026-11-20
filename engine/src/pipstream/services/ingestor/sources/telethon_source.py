@@ -1,7 +1,11 @@
 """Live Telegram source: one Telethon client per linked user account (userbot, read-only).
 
-Rules: never post, never bulk-join, never touch read status; FloodWait is handled by
-Telethon (flood_sleep_threshold). Session strings arrive decrypted in memory only.
+Rules: never post in channels, never bulk-join, never touch read status; FloodWait is handled
+by Telethon (flood_sleep_threshold). Session strings arrive decrypted in memory only. The one
+write is opt-in (PS_INGESTOR_CONFIRM_TO_SAVED): a note to the account's own Saved Messages.
+
+Posts are read whether they arrive from others or were sent by this account itself (a channel
+you own and post in), since both are signals to copy. Private chats are always ignored.
 """
 from __future__ import annotations
 
@@ -40,10 +44,15 @@ class TelethonSource:
                 reply_to_id=reply_to, is_edit=is_edit, has_media=m.media is not None,
                 posted_at=m.date))
 
-        client.add_event_handler(lambda e: _emit(e, False), events.NewMessage(incoming=True))
-        client.add_event_handler(lambda e: _emit(e, True), events.MessageEdited(incoming=True))
+        client.add_event_handler(lambda e: _emit(e, False), events.NewMessage())
+        client.add_event_handler(lambda e: _emit(e, True), events.MessageEdited())
         self._client = client
         log.info("telethon source connected", extra={"ctx": {"telegram_account_id": self.account_id}})
+
+    async def send_to_saved(self, text: str) -> None:
+        """Write a note to this account's own Saved Messages (never to a channel)."""
+        if self._client:
+            await self._client.send_message("me", text)
 
     async def stop(self) -> None:
         if self._client:

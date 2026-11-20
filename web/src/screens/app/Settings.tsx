@@ -51,6 +51,25 @@ export default function Settings() {
         <PlanCard plan={user?.plan} />
       </Section>
 
+      <Section title="MetaTrader EA">
+        <Card>
+          <p className="text-[15px] text-ink-2">
+            Copy trades into your own MetaTrader 4 or 5 with the free PipStream EA. Add your account under Brokers to get your personal key and the install steps.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Link to="/app/brokers" className="inline-flex min-h-11 items-center rounded-2xl bg-brand px-4 text-sm font-semibold text-brand-ink">
+              Set up MetaTrader
+            </Link>
+            <a href="/ea/PipStream.mq5" download className="inline-flex min-h-11 items-center rounded-2xl bg-brand-soft px-4 text-sm font-semibold text-brand">
+              EA for MT5
+            </a>
+            <a href="/ea/PipStream.mq4" download className="inline-flex min-h-11 items-center rounded-2xl bg-brand-soft px-4 text-sm font-semibold text-brand">
+              EA for MT4
+            </a>
+          </div>
+        </Card>
+      </Section>
+
       <Section title="Appearance">
         <ThemeSwitch />
       </Section>
@@ -81,7 +100,7 @@ export default function Settings() {
                 )
               }
             />
-            <Row icon={<Wallet className="size-5" />} title="Brokers" sub="Practice, MetaTrader 5, Deriv" to="/app/brokers" />
+            <Row icon={<Wallet className="size-5" />} title="Brokers" sub="Practice, MetaTrader 4/5 (EA download), Deriv" to="/app/brokers" />
             <Row icon={<CreditCard className="size-5" />} title="Plan and billing" to="/app/billing" />
           </ul>
         </Card>

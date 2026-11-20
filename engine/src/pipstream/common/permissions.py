@@ -53,7 +53,9 @@ SERVICES: dict[str, ServicePerms] = {
         consume=frozenset({T.TRADE_INTENT, T.TRADE_EXECUTED, T.ACCOUNT_SNAPSHOT}),
         broadcast=frozenset({T.CONFIG_CHANGED}),
         rw_keys=("ps:idem:*", "ps:acct:*", "ps:quote:*", "ps:paper:*"),
-        ro_keys=("ps:killswitch:*",),
+        ro_keys=("ps:killswitch:*", "ps:eares:*"),
+        # EA bridge: only the executor can queue commands for a customer's MetaTrader terminal
+        extra=("(+xadd +xtrim +xrevrange ~ps:acct:*:ea:cmd)",),
     ),
     # Laravel core -------------------------------------------------------------------
     # Web app, billing, notifications, kill switch. Its queue/cache/session keys live under
@@ -62,9 +64,10 @@ SERVICES: dict[str, ServicePerms] = {
         publish=frozenset({T.CONFIG_CHANGED, T.BILLING_CHANGED, T.TG_LOGIN_REQUEST}),
         consume=frozenset({T.TRADE_EXECUTED, T.TRADE_FAILED, T.TRADE_CLOSED, T.RISK_LIMIT_HIT,
                            T.SIGNAL_REJECTED, T.TG_LOGIN_STATUS}),
-        rw_keys=("ps:killswitch:*",),
+        rw_keys=("ps:killswitch:*", "ps:eares:*"),
         ro_keys=("ps:health:*", "ps:acct:*", "ps:lease:*"),
-        extra=("(+@all -@admin -@dangerous ~laravel:*)",),
+        # EA bridge: hands queued commands to the EA (read only) and stores its answers (ps:eares:*)
+        extra=("(+@all -@admin -@dangerous ~laravel:*)", "(+xrevrange %R~ps:acct:*:ea:cmd)"),
     ),
 }
 

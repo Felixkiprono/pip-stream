@@ -16,12 +16,14 @@ return Application::configure(basePath: dirname(__DIR__))
             Route::middleware('web')->prefix('api/v1')->group(base_path('routes/app-api.php'));
             // Signed webhooks from payment and Telegram: no session, no CSRF
             Route::prefix('webhooks')->group(base_path('routes/webhooks.php'));
+            // MetaTrader Expert Advisor check-ins: per-account key, no session, no CSRF
+            Route::prefix('ea/v1')->group(base_path('routes/ea.php'));
         },
     )
     ->withMiddleware(function (Middleware $middleware): void {
         // Traefik (NanoDeploi) -> nginx -> php-fpm: trust the proxy chain for scheme and host
         $middleware->trustProxies(at: '*');
-        $middleware->preventRequestForgery(except: ['webhooks/*']);
+        $middleware->preventRequestForgery(except: ['webhooks/*', 'ea/*']);
         $middleware->alias(['admin' => \App\Http\Middleware\EnsureAdmin::class, 'active' => \App\Http\Middleware\EnsureActive::class]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

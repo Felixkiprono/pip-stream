@@ -7,6 +7,8 @@ use App\Models\BrokerAccount;
 use App\Pipstream\Bus;
 use App\Pipstream\Vault;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
 /** Broker passwords are sealed to the engine's executor key the moment they arrive and are
@@ -24,10 +26,52 @@ class BrokerController extends Controller
             $status = $raw ? json_decode($raw, true) : ['state' => 'connecting', 'detail' => 'Waiting for the trading engine'];
         }
 
+        if ($b->connector === 'ea_bridge') {
+            $status = $this->eaStatus($b);
+        }
+
         return ['id' => $b->id, 'connector' => $b->connector, 'label' => $b->label, 'enabled' => $b->enabled,
             'connected' => $b->connector === 'paper' || ($status ? $status['state'] === 'connected' : $b->hasCredentials()),
             'status' => $status, 'platform' => $b->symbol_map['_platform'] ?? null,
             'login_hint' => $b->symbol_map['_login_hint'] ?? null];
+    }
+
+    /** The EA checks in about once a second; its last check-in and account state live in redis. */
+    private function eaStatus(BrokerAccount $b): array
+    {
+        $p = config('pipstream.stream_prefix');
+        [$seen, $raw] = rescue(fn () => $this->bus->redis()->client()->mget(["{$p}:eares:{$b->id}:seen", "{$p}:eares:{$b->id}:state"]), [null, null], false);
+        $st = $raw ? json_decode($raw, true) : null;
+        if (! $seen) {
+            return ['state' => 'connecting', 'detail' => 'Waiting for the PipStream EA to check in from your terminal'];
+        }
+        $age = time() - (int) $seen;
+        $acct = $st ? array_filter(['balance' => $st['balance'] ?? null, 'equity' => $st['equity'] ?? null,
+            'currency' => $st['currency'] ?? null, 'login' => $st['login'] ?? null, 'server' => $st['server'] ?? null,
+            'company' => $st['company'] ?? null, 'positions' => count($st['positions'] ?? [])], fn ($v) => $v !== null) : null;
+        if ($age > 15) {
+            return ['state' => 'error', 'detail' => 'Your MetaTrader terminal is offline (last seen '.now()->subSeconds($age)->diffForHumans().')', 'account' => $acct, 'seen_s' => $age];
+        }
+        if ($st && empty($st['trade_allowed'])) {
+            return ['state' => 'error', 'detail' => 'EA is running, but Algo Trading is off in MetaTrader. Turn it on in the toolbar.', 'account' => $acct, 'seen_s' => $age];
+        }
+
+        return ['state' => 'connected', 'detail' => 'EA running', 'account' => $acct, 'seen_s' => $age];
+    }
+
+    /** A new EA key (the old one stops working). Shown once. */
+    public function eaKey(Request $r, BrokerAccount $broker)
+    {
+        abort_unless($broker->user_id === $r->user()->id && $broker->connector === 'ea_bridge' && $broker->enabled, 404);
+        $key = 'psk_'.Str::random(40);
+        $old = $broker->symbol_map['_ea_key_hash'] ?? null;
+        $broker->update(['symbol_map' => ['_ea_key_hash' => EaController::hashKey($key)] + (array) $broker->symbol_map]);
+        if ($old) {
+            Cache::forget("ea-key:{$old}");
+        }
+        AuditLog::record($r->user()->id, 'ea_key_rotated', 'broker_account', $broker->id);
+
+        return ['broker' => $this->present($broker), 'ea_key' => $key];
     }
 
     public function show(Request $r, BrokerAccount $broker)
@@ -45,9 +89,9 @@ class BrokerController extends Controller
     public function store(Request $r, Bus $bus)
     {
         $data = $r->validate([
-            'connector' => ['required', Rule::in(['metaapi', 'mt5_bridge', 'deriv_options'])],
+            'connector' => ['required', Rule::in(['ea_bridge', 'metaapi', 'mt5_bridge', 'deriv_options'])],
             'label' => ['nullable', 'string', 'max:60'],
-            'platform' => ['required_if:connector,metaapi', 'nullable', Rule::in(['mt4', 'mt5'])],
+            'platform' => ['required_if:connector,metaapi,ea_bridge', 'nullable', Rule::in(['mt4', 'mt5'])],
             'login' => ['required_if:connector,mt5_bridge,metaapi', 'nullable', 'string', 'max:40'],
             'password' => ['required_if:connector,mt5_bridge,metaapi', 'nullable', 'string', 'max:200'],
             'server' => ['required_if:connector,mt5_bridge,metaapi', 'nullable', 'string', 'max:120'],
@@ -57,6 +101,18 @@ class BrokerController extends Controller
         $max = $u->billing?->plan?->max_accounts ?? 1;
         abort_if($u->brokerAccounts()->where('connector', '!=', 'paper')->count() >= $max, 402,
             "Your plan allows {$max} broker account(s).");
+        if ($data['connector'] === 'ea_bridge') {
+            // No password at all: the EA in the customer's terminal logs in with this key.
+            $key = 'psk_'.Str::random(40);
+            $b = BrokerAccount::create(['user_id' => $u->id, 'connector' => 'ea_bridge',
+                'label' => ($data['label'] ?? null) ?: ($data['platform'] === 'mt4' ? 'MetaTrader 4 (EA)' : 'MetaTrader 5 (EA)'),
+                'credentials_ciphertext' => null, 'enabled' => true,
+                'symbol_map' => ['_platform' => $data['platform'], '_ea_key_hash' => EaController::hashKey($key)]]);
+            AuditLog::record($u->id, 'broker_added', 'broker_account', $b->id);
+            $bus->publish('config.changed', ['entity' => 'broker_account', 'entity_id' => $b->id]);
+
+            return ['broker' => $this->present($b), 'ea_key' => $key];
+        }
         $mt = in_array($data['connector'], ['mt5_bridge', 'metaapi'], true);
         $creds = match ($data['connector']) {
             // MetaApi gets the password once; the engine then keeps only MetaApi's account id
@@ -89,6 +145,9 @@ class BrokerController extends Controller
     public function destroy(Request $r, BrokerAccount $broker, Bus $bus)
     {
         abort_unless($broker->user_id === $r->user()->id && $broker->connector !== 'paper', 404);
+        if ($old = $broker->symbol_map['_ea_key_hash'] ?? null) {
+            Cache::forget("ea-key:{$old}");
+        }
         $broker->update(['enabled' => false, 'credentials_ciphertext' => null]);
         $r->user()->copyRules()->where('broker_account_id', $broker->id)->update(['enabled' => false]);
         AuditLog::record($r->user()->id, 'broker_removed', 'broker_account', $broker->id);

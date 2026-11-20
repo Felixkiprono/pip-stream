@@ -30,4 +30,4 @@ def available() -> list[str]:
 
 
 def _load_builtin() -> None:
-    from . import deriv_options, metaapi, mt5_bridge, paper  # noqa: F401  (import registers)
+    from . import deriv_options, ea_bridge, metaapi, mt5_bridge, paper  # noqa: F401  (import registers)

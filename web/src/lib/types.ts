@@ -49,8 +49,9 @@ export type Rule = {
   limits: Record<string, number>
 }
 export type MyChannel = { id: string; title: string; username?: string | null; signals_7d: number; last_signal_at: string | null; rule: Rule | null }
-export type BrokerStatus = { state: 'connecting' | 'connected' | 'error'; detail: string; at?: number }
-export type Broker = { id: string; connector: 'paper' | 'metaapi' | 'mt5_bridge' | 'deriv_options'; label: string; enabled: boolean; connected: boolean; login_hint: string | null; platform?: 'mt4' | 'mt5' | null; status?: BrokerStatus | null }
+export type BrokerAccountState = { balance?: number; equity?: number; currency?: string; login?: string; server?: string; company?: string; positions?: number }
+export type BrokerStatus = { state: 'connecting' | 'connected' | 'error'; detail: string; at?: number; account?: BrokerAccountState | null; seen_s?: number }
+export type Broker = { id: string; connector: 'paper' | 'ea_bridge' | 'metaapi' | 'mt5_bridge' | 'deriv_options'; label: string; enabled: boolean; connected: boolean; login_hint: string | null; platform?: 'mt4' | 'mt5' | null; status?: BrokerStatus | null }
 export type Style = { id: Rule['style']; label: string; blurb: string }
 export type Plan = { id: string; name: string; price: number; currency: string; live: boolean; brokers: number }
 export type Billing = {

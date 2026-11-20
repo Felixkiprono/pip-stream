@@ -47,7 +47,7 @@ say "1/3  Installing the PipStream EA"
 cd "$DIR" || fail "Can't open $DIR"
 mkdir -p "$MQL/Experts" "$MQL/Files" "config"
 TMP="$(mktemp -d)"
-if curl -fsS "$URL/ea/PipStream.$EXT" -o "$TMP/PipStream.$EXT" && [ "$(head -c 2 "$TMP/PipStream.$EXT")" != "<!" ]; then
+if curl -fs "$URL/ea/PipStream.$EXT" -o "$TMP/PipStream.$EXT" && [ "$(head -c 2 "$TMP/PipStream.$EXT")" != "<!" ]; then
   cp "$TMP/PipStream.$EXT" "$MQL/Experts/PipStream.$EXT"
 else
   curl -fsS "$URL/ea/PipStream.$SRC" -o "$MQL/Experts/PipStream.$SRC" || fail "Couldn't download PipStream from $URL. Check your internet and try again."
@@ -62,8 +62,8 @@ say "2/3  Linking it to your PipStream account"
 printf '%s' "$URL" > "$MQL/Files/PipStream.url"
 printf '%s' "$TOKEN" > "$MQL/Files/PipStream.pair"
 
-say "3/3  Allowing it to reach PipStream and starting MetaTrader"
-printf '%s\r\n' "[Experts]" "AllowLiveTrading=1" "Enabled=1" "AllowDllImport=0" "WebRequest=1" "WebRequestUrl=$URL" \
+say "3/3  Starting MetaTrader with PipStream on a chart"
+printf '%s\r\n' "[Experts]" "AllowLiveTrading=1" "Enabled=1" "AllowDllImport=0" "Account=0" "Profile=0" \
   "[StartUp]" "Expert=PipStream" "Symbol=EURUSD" "Period=H1" > "config/pipstream-start.ini"
 printf '%s' "$URL" | pbcopy 2>/dev/null
 if [ -n "$WINE" ]; then
@@ -74,12 +74,11 @@ fi
 
 say "Done. MetaTrader is opening with PipStream on a EURUSD chart."
 cat <<MSG
-Within a few seconds PipStream shows "Connected" in your browser.
-
-If the chart says "Add $URL under ... Allow WebRequest":
+One thing MetaTrader only lets you do yourself (first time only):
   Tools > Options > Expert Advisors > tick "Allow WebRequest for listed URL",
-  add $URL (it's already copied, just paste) and press OK.
+  add $URL (it's already copied: just paste) and press OK.
 
+Then PipStream shows "Connected" in your browser within a few seconds.
 If MetaTrader asks you to log in, use your broker login as usual.
 MSG
 

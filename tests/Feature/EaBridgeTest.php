@@ -195,4 +195,15 @@ class EaBridgeTest extends TestCase
         $this->actingAs($u)->postJson('/api/v1/brokers/installer', ['platform' => 'mt5', 'broker_id' => $id])->assertJsonPath('broker.id', $id);
         $this->get('/ea/PipStream.ex5')->assertNotFound();  // no ready-built EA in the repo yet: 404, never the app's HTML
     }
+
+    public function test_a_busy_ea_does_not_use_up_the_setup_and_login_limits(): void
+    {
+        [$u, $b, $key] = $this->addEa();
+        for ($i = 0; $i < 35; $i++) {
+            $this->call('POST', '/ea/v1/sync', [], [], [], ['HTTP_X-PipStream-Key' => $key])->assertOk();
+        }
+        $cmd = $this->actingAs($u)->postJson('/api/v1/brokers/installer', ['platform' => 'mt5', 'broker_id' => $b['id']])->assertOk()->json('mac');
+        preg_match('#(pst_[A-Za-z0-9]{40})#', $cmd, $m);
+        $this->get("/ea/install/{$m[1]}.sh")->assertOk();
+    }
 }

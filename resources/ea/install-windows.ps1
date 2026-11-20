@@ -56,14 +56,14 @@ Say '2/3  Linking it to your PipStream account'
 [IO.File]::WriteAllText((Join-Path $files 'PipStream.url'), $Url)
 [IO.File]::WriteAllText((Join-Path $files 'PipStream.pair'), $Token)
 
-Say '3/3  Allowing it to reach PipStream and starting MetaTrader'
+Say '3/3  Starting MetaTrader with PipStream on a chart'
 $ini = Join-Path $t.Data 'config\pipstream-start.ini'
-"[Experts]`r`nAllowLiveTrading=1`r`nEnabled=1`r`nAllowDllImport=0`r`nWebRequest=1`r`nWebRequestUrl=$Url`r`n[StartUp]`r`nExpert=PipStream`r`nSymbol=EURUSD`r`nPeriod=H1`r`n" | Set-Content $ini -Encoding Unicode
+"[Experts]`r`nAllowLiveTrading=1`r`nEnabled=1`r`nAllowDllImport=0`r`nAccount=0`r`nProfile=0`r`n[StartUp]`r`nExpert=PipStream`r`nSymbol=EURUSD`r`nPeriod=H1`r`n" | Set-Content $ini -Encoding Unicode
 Set-Clipboard -Value $Url -ErrorAction SilentlyContinue
 Start-Process (Join-Path $t.Prog $Exe) -ArgumentList "/config:`"$ini`""
 
 Say 'Done. MetaTrader is opening with PipStream on a EURUSD chart.'
-Write-Host "Within a few seconds PipStream shows 'Connected' in your browser."
-Write-Host "If the chart says 'Add $Url under ... Allow WebRequest': Tools > Options > Expert Advisors,"
+Write-Host "One thing MetaTrader only lets you do yourself (first time only): Tools > Options > Expert Advisors,"
 Write-Host "tick 'Allow WebRequest for listed URL', paste $Url (already copied) and press OK."
+Write-Host "Then PipStream shows 'Connected' in your browser within a few seconds."
 Read-Host 'Press Enter to close' | Out-Null

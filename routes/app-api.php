@@ -13,7 +13,7 @@ use Illuminate\Support\Facades\Route;
 
 // ---------------------------------------------------------------- auth
 Route::get('auth/me', [AuthController::class, 'me']);
-Route::middleware('throttle:10,1')->group(function () {
+Route::middleware('throttle:auth')->group(function () {
     Route::post('auth/register', [AuthController::class, 'register']);
     Route::post('auth/login', [AuthController::class, 'login']);
 });
@@ -34,7 +34,7 @@ Route::middleware(['auth', 'active'])->group(function () {
 
     // ------------------------------------------------------------ Telegram linking
     Route::get('telegram', [TelegramController::class, 'show']);
-    Route::middleware('throttle:20,1')->group(function () {
+    Route::middleware('throttle:writes')->group(function () {
         Route::post('telegram/phone', [TelegramController::class, 'phone']);
         Route::post('telegram/code', [TelegramController::class, 'code']);
         Route::post('telegram/resend', [TelegramController::class, 'resend']);
@@ -57,7 +57,7 @@ Route::middleware(['auth', 'active'])->group(function () {
     Route::post('brokers', [BrokerController::class, 'store']);
     Route::post('brokers/pair', [BrokerController::class, 'pair']);
     Route::get('brokers/pair/status', [BrokerController::class, 'pairStatus']);
-    Route::post('brokers/installer', [BrokerController::class, 'installer'])->middleware('throttle:10,1');
+    Route::post('brokers/installer', [BrokerController::class, 'installer'])->middleware('throttle:installer');
     Route::get('brokers/{broker}', [BrokerController::class, 'show']);
     Route::post('brokers/{broker}/test', [BrokerController::class, 'test']);
     Route::get('brokers/{broker}/test/{test}', [BrokerController::class, 'testResult']);
@@ -76,7 +76,7 @@ Route::middleware(['auth', 'active'])->group(function () {
         Route::get('overview', [AdminController::class, 'overview']);
         Route::get('dashboard', [AdminController::class, 'dashboard']);
         Route::get('system', [AdminController::class, 'system']);
-        Route::post('system/telegram-test', [AdminController::class, 'telegramTest'])->middleware('throttle:6,1');
+        Route::post('system/telegram-test', [AdminController::class, 'telegramTest'])->middleware('throttle:admin-test');
         Route::post('kill-switch', [AdminController::class, 'killSwitch']);
         Route::get('channels', [AdminController::class, 'channels']);
         Route::put('channels/{channel}', [AdminController::class, 'updateChannel']);

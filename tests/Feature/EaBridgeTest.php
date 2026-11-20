@@ -218,4 +218,13 @@ class EaBridgeTest extends TestCase
         $this->assertSame('2440.3', $this->redis()->get("{$p}:quote:XAUUSD"));
         $this->assertFalse($this->redis()->get("{$p}:quote:BAD KEY"));
     }
+
+    public function test_status_says_when_metatrader_is_not_logged_in_to_the_broker(): void
+    {
+        [$u, $b, $key] = $this->addEa();
+        $this->call('POST', '/ea/v1/sync', [], [], [], ['HTTP_X-PipStream-Key' => $key, 'CONTENT_TYPE' => 'application/json'],
+            json_encode(['state' => ['balance' => 0, 'positions' => [], 'trade_allowed' => true, 'broker_connected' => false]]))->assertOk();
+        $this->actingAs($u)->getJson("/api/v1/brokers/{$b['id']}")->assertJsonPath('broker.status.state', 'error')
+            ->assertJsonPath('broker.status.detail', "MetaTrader isn't connected to your broker. In MetaTrader: File → Login to Trade Account.");
+    }
 }

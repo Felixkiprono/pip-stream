@@ -53,6 +53,9 @@ class BrokerController extends Controller
         if ($age > 15) {
             return ['state' => 'error', 'detail' => 'Your MetaTrader terminal is offline (last seen '.now()->subSeconds($age)->diffForHumans().')', 'account' => $acct, 'seen_s' => $age];
         }
+        if ($st && array_key_exists('broker_connected', $st) && ! $st['broker_connected']) {
+            return ['state' => 'error', 'detail' => "MetaTrader isn't connected to your broker. In MetaTrader: File → Login to Trade Account.", 'account' => $acct, 'seen_s' => $age];
+        }
         if ($st && empty($st['trade_allowed'])) {
             return ['state' => 'error', 'detail' => 'EA is running, but Algo Trading is off in MetaTrader. Turn it on in the toolbar.', 'account' => $acct, 'seen_s' => $age];
         }

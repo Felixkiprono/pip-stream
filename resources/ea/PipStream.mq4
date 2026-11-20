@@ -224,6 +224,7 @@ string StateJson()
               ",\"company\":\"" + Esc(AccountCompany()) + "\"" +
               ",\"demo\":" + (IsDemo() ? "true" : "false") +
               ",\"trade_allowed\":" + (allowed ? "true" : "false") +
+              ",\"broker_connected\":" + (TerminalInfoInteger(TERMINAL_CONNECTED) != 0 ? "true" : "false") +
               ",\"positions\":[";
    bool first = true;
    for(int i = 0; i < OrdersTotal() && i < 300; i++)
@@ -479,6 +480,8 @@ void Show()
 {
    bool allowed = IsTradeAllowed() && (TerminalInfoInteger(TERMINAL_TRADE_ALLOWED) != 0);
    string s = "PipStream " + PS_VERSION + ": " + g_status;
+   if(TerminalInfoInteger(TERMINAL_CONNECTED) == 0)
+      s += "\nMetaTrader isn't connected to your broker: File > Login to Trade Account";
    if(!allowed)
       s += "\nAutoTrading is OFF: turn it on in the toolbar so trades can be placed";
    if(g_last_ok > 0)

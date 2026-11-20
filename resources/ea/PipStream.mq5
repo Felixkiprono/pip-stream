@@ -187,6 +187,7 @@ string StateJson()
               ",\"company\":\"" + Esc(AccountInfoString(ACCOUNT_COMPANY)) + "\"" +
               ",\"demo\":" + (AccountInfoInteger(ACCOUNT_TRADE_MODE) == ACCOUNT_TRADE_MODE_DEMO ? "true" : "false") +
               ",\"trade_allowed\":" + (allowed ? "true" : "false") +
+              ",\"broker_connected\":" + (TerminalInfoInteger(TERMINAL_CONNECTED) != 0 ? "true" : "false") +
               ",\"positions\":[";
    int n = PositionsTotal();
    bool first = true;
@@ -445,6 +446,8 @@ void Show()
 {
    bool allowed = (TerminalInfoInteger(TERMINAL_TRADE_ALLOWED) != 0) && (MQLInfoInteger(MQL_TRADE_ALLOWED) != 0);
    string s = "PipStream " + PS_VERSION + ": " + g_status;
+   if(TerminalInfoInteger(TERMINAL_CONNECTED) == 0)
+      s += "\nMetaTrader isn't connected to your broker: File > Login to Trade Account";
    if(!allowed)
       s += "\nAlgo Trading is OFF: turn it on in the toolbar so trades can be placed";
    if(g_last_ok > 0)

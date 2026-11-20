@@ -293,6 +293,9 @@ class ExecutionRouter:
                 state = {}
                 if name == "ea_bridge":
                     state = await conn.state()
+                    if state.get("broker_connected") is False:
+                        await step("Logged in to your broker", False, "MetaTrader shows no connection: File > Login to Trade Account")
+                        return await save(state="done", ok=False)
                     allowed = bool(state.get("trade_allowed"))
                     await step("Algo Trading on", allowed, "" if allowed else "turn on Algo Trading / AutoTrading in the toolbar")
                     if not allowed:

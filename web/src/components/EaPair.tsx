@@ -35,7 +35,8 @@ function useEaFile(mt: 4 | 5, eaUrl: string | undefined) {
     staleTime: Infinity,
     enabled: !!eaUrl,
     queryFn: async () => {
-      if (eaUrl !== 'https://pip.stream') return `/ea/PipStream.mq${mt}`
+      // a ready-built EA has the source's default address (local for now), so only offer it for that address
+      if (eaUrl !== 'http://127.0.0.1:8000') return `/ea/PipStream.mq${mt}`
       const built = `/ea/PipStream.ex${mt}`
       try {
         const r = await fetch(built, { method: 'HEAD' })

@@ -17,7 +17,7 @@
 #include <Trade\Trade.mqh>
 
 input string PipStreamKey = "";                    // Optional: leave empty and pair with the code shown on the chart
-input string PipStreamUrl = "https://pip.stream";  // Server (add it under Tools > Options > Expert Advisors)
+input string PipStreamUrl = "http://127.0.0.1:8000";  // Server (add it under Tools > Options > Expert Advisors)
 input int    SlippagePoints = 30;                  // Max slippage for market orders, in points
 
 #define PS_MAGIC 770077

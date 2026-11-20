@@ -1,0 +1,94 @@
+@import "tailwindcss";
+
+/* PipStream design tokens. Light and dark follow the phone's setting. */
+:root {
+  --bg: #f6f7fb;
+  --surface: #ffffff;
+  --surface-2: #eef0f6;
+  --line: #e2e5ee;
+  --ink: #0d1424;
+  --ink-2: #4b5468;
+  --ink-3: #8a92a6;
+  --brand: #1f6fff;
+  --brand-ink: #ffffff;
+  --brand-soft: #e3ecff;
+  --up: #0f9d6b;
+  --up-soft: #dcf5ea;
+  --down: #e0444e;
+  --down-soft: #fde4e5;
+  --warn: #c27c0e;
+  --warn-soft: #fbefd9;
+  --tg: #2aabee;
+  --shadow: 0 1px 2px rgb(13 20 36 / 0.06), 0 8px 24px rgb(13 20 36 / 0.06);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0b1220;
+    --surface: #121a2b;
+    --surface-2: #1a2438;
+    --line: #243049;
+    --ink: #eef2fa;
+    --ink-2: #aab3c7;
+    --ink-3: #6f7a92;
+    --brand: #4d8dff;
+    --brand-ink: #ffffff;
+    --brand-soft: #18284a;
+    --up: #2fd296;
+    --up-soft: #10322a;
+    --down: #ff6b74;
+    --down-soft: #3a1a20;
+    --warn: #f2b14a;
+    --warn-soft: #3a2b12;
+    --shadow: 0 1px 2px rgb(0 0 0 / 0.3), 0 8px 24px rgb(0 0 0 / 0.25);
+  }
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-line: var(--line);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-brand: var(--brand);
+  --color-brand-ink: var(--brand-ink);
+  --color-brand-soft: var(--brand-soft);
+  --color-up: var(--up);
+  --color-up-soft: var(--up-soft);
+  --color-down: var(--down);
+  --color-down-soft: var(--down-soft);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-tg: var(--tg);
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --shadow-card: var(--shadow);
+}
+
+@layer base {
+html, body, #root { min-height: 100%; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: none;
+}
+input, button, select, textarea { font: inherit; color: inherit; }
+}
+.tabular { font-variant-numeric: tabular-nums; }
+.safe-top { padding-top: max(env(safe-area-inset-top), 0px); }
+.safe-bottom { padding-bottom: max(env(safe-area-inset-bottom), 12px); }
+
+@keyframes pop { 0% { transform: scale(.6); opacity: 0 } 60% { transform: scale(1.08); opacity: 1 } 100% { transform: scale(1) } }
+@keyframes rise { from { transform: translateY(10px); opacity: 0 } to { transform: none; opacity: 1 } }
+@keyframes shake { 0%,100% { transform: none } 20%,60% { transform: translateX(-6px) } 40%,80% { transform: translateX(6px) } }
+@keyframes pulse-ring { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--tg) 45%, transparent) } 100% { box-shadow: 0 0 0 18px transparent } }
+@keyframes fall { to { transform: translateY(110vh) rotate(540deg); } }
+.anim-pop { animation: pop .45s cubic-bezier(.2,.9,.3,1.2) both; }
+.anim-rise { animation: rise .35s ease-out both; }
+.anim-shake { animation: shake .4s ease-in-out; }
+.anim-pulse { animation: pulse-ring 1.6s ease-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .anim-pop, .anim-rise, .anim-shake, .anim-pulse { animation: none; }
+}

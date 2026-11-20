@@ -1,4 +1,24 @@
+# Laravel
+/vendor/
+/node_modules/
+/public/spa/
+/public/hot
+/public/storage
+/storage/*.key
+/storage/pail
 .env
+.env.backup
+.env.production
+.phpunit.result.cache
+/.phpunit.cache
+/auth.json
+/.fleet
+/.idea
+/.vscode
+# web (React)
+/web/node_modules/
+/web/dist/
+# engine (Python)
 __pycache__/
 *.egg-info/
 .pytest_cache/

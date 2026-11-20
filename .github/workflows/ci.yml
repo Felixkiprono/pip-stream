@@ -11,11 +11,21 @@ jobs:
         options: --health-cmd pg_isready --health-interval 5s --health-retries 10
     steps:
       - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with: {php-version: "8.3", extensions: "pdo_pgsql, redis, sodium, pcntl"}
+      - uses: actions/setup-node@v4
+        with: {node-version: "22", cache: npm}
       - uses: actions/setup-python@v5
         with: {python-version: "3.12"}
-      - run: sudo apt-get update && sudo apt-get install -y redis-server
-      - run: pip install -e ".[dev]"
-      - run: pytest -q
+      - run: sudo apt-get update && sudo apt-get install -y redis-server && sudo systemctl start redis-server
+      - run: composer install --no-interaction --prefer-dist
+      - run: PGPASSWORD=postgres psql -h 127.0.0.1 -U postgres -c 'create database pipstream_test'
+      - run: cp .env.example .env && php artisan key:generate
+      - run: php artisan test
+        env: {DB_HOST: 127.0.0.1, DB_PORT: "5432", DB_USERNAME: postgres, DB_PASSWORD: postgres, REDIS_HOST: 127.0.0.1, REDIS_PORT: "6379"}
+      - run: npm ci && npm run typecheck && npm run build
+      - run: pip install -e "engine[dev]"
+      - run: pytest -q engine/tests
         env:
           PS_TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
-      - run: docker build -t pipstream:ci .
+      - run: docker build -t pipstream-engine:ci engine && docker build -f docker/php/Dockerfile -t pipstream-php:ci .

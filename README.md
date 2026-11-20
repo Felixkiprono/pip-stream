@@ -1,90 +1,58 @@
 # PipStream
 
-Telegram signal copier, built as event-driven services. This repo is the **low-cost
-experiment** from the project handoff (§9): one VPS, Docker Compose, Postgres + Redis
-Streams, rule-based parsing, paper / MT5-bridge / Deriv-demo execution.
+Copy the Telegram trading signals you follow to your broker, automatically. Lives at **pip.stream**.
 
-- How the services fit together: **[docs/architecture.md](docs/architecture.md)**
+One repository, three parts:
 
-![PipStream service map](docs/diagrams/service-map.png)
-- Channel / account / rule setup (no web app yet): [config/pipstream.yaml](config/pipstream.yaml)
+| Part | Where | What it does |
+|---|---|---|
+| **Laravel 13** core | repo root (`app/`, `routes/`, `database/`) | accounts, roles, JSON API, Telegram linking, brokers, copy styles, billing (Paystack: M-Pesa and card), alerts, admin, kill switch |
+| **React app** (installable PWA) | `web/`, built into `public/spa` | landing page, the customer app (mobile first, installs on the phone) and the admin console |
+| **Python engine**, one service | `engine/` | `intake` (Telegram reader + rule-based parser), `risk` (rules, sizing, signed intents), `executor` (paper, MT5 bridge, Deriv), run as child processes in that order and restarted if one stops |
 
-> Channel ids, house formats and the sample posts in `config/replay/` are **placeholders**.
-> Replace them with real samples from the target channels before judging parse accuracy.
+They talk over **Redis Streams** (each worker and Laravel has its own Redis user, so only `risk`
+can create a trade) and share **one Postgres schema**, `database/schema/pipstream.sql`, applied by
+`php artisan migrate`. Broker passwords and Telegram sessions are sealed (libsodium) to the one
+engine worker that needs them; Laravel holds only the public keys.
 
-## Services
+Parsing is **rule-based only**. No AI model reads Telegram content.
 
-| Service | Package | Consumes | Publishes | Network |
-|---|---|---|---|---|
-| Core API | `services/core_api` | (HTTP) | `config.changed`, `billing.webhook` | public (127.0.0.1 → reverse proxy) |
-| Telegram Ingestor | `services/ingestor` | `config.changed`* | `tg.message.new`, `tg.message.edited` | outbound only |
-| Signal Parser | `services/parser` | `tg.message.*` | `signal.parsed`, `signal.rejected` | internal |
-| Rules / Risk Engine | `services/risk_engine` | `signal.parsed` | `trade.intent` (signed), `risk.limit_hit` | internal |
-| Execution Router | `services/execution_router` | `trade.intent` | `trade.executed`, `trade.failed`, `account.snapshot` | outbound to brokers |
-| Position Tracker | `services/position_tracker` | `trade.executed`, `account.snapshot` | `trade.closed` | internal |
-| Notifications | `services/notifications` | `trade.*`, `risk.limit_hit`, `signal.rejected` | – | outbound to providers |
-| Billing | `services/billing` | `billing.webhook` | `billing.changed` | internal |
+> Channel names, house formats and sample posts in `engine/config/` are invented placeholders.
 
-\* broadcast topic: every replica receives it.
-
-Connectors (execution plugins): `paper`, `mt5_bridge`, `deriv_options` in
-`services/execution_router/connectors/`. Add one by implementing the `Connector` protocol
-and decorating it with `@register("name")`.
-
-## Run it
+## Run it locally
 
 ```bash
-cp .env.example .env
-docker compose build
-docker compose run --rm keys >> .env        # signing keys, master key, per-service Redis passwords
-docker compose up -d                        # replay mode: plays config/replay/sample_posts.jsonl
-docker compose logs -f parser risk-engine execution-router
+./scripts/test-infra.sh                  # Postgres on :55432, Redis on :56379
+composer install && cp .env.example .env && php artisan key:generate
+php artisan migrate
+php artisan pipstream:admin you@example.com --password=change-me
+npm ci && npm run build                  # or `npm run dev` for the Vite dev server on :5173
+php artisan serve                        # :8000
+php artisan pipstream:consume            # engine events -> alerts, Telegram login answers
+php artisan queue:work
+pip install -e "engine[dev]" && pipstream keys    # put the keys in .env and your shell
+PS_INGESTOR_FAKE_TELEGRAM=1 PS_INGESTOR_SOURCE=replay pipstream run engine
 ```
 
-Check what happened to a post (every event carries a `trace_id`):
-
-```bash
-TOKEN=$(grep ^PS_ADMIN_TOKEN .env | cut -d= -f2)
-curl -s -H "Authorization: Bearer $TOKEN" localhost:8080/v1/admin/status
-curl -s -H "Authorization: Bearer $TOKEN" "localhost:8080/v1/admin/signals?limit=20"
-curl -s -H "Authorization: Bearer $TOKEN" localhost:8080/v1/admin/trace/<trace_id>
-# try a parser profile against a post without saving it
-curl -s -H "Authorization: Bearer $TOKEN" -H 'content-type: application/json' \
-     -d '{"text":"GOLD BUY 2348-2350 SL 2340 TP 2360"}' localhost:8080/v1/admin/parse-preview
-# kill switch
-curl -s -H "Authorization: Bearer $TOKEN" -H 'content-type: application/json' -d '{"on":true}' \
-     localhost:8080/v1/admin/kill-switch
-```
-
-### Going live on Telegram (spare account)
-
-1. Get `api_id` / `api_hash` at my.telegram.org, put them in `.env`.
-2. Link the account (prompts for the login code; the session is stored encrypted):
-   `docker compose run --rm -it ingestor python -m pipstream.services.ingestor.login --account-id tga_spare --user-id usr_owner --phone +254... --list-channels`
-3. Put the printed channel ids into `config/pipstream.yaml`, set `PS_INGESTOR_SOURCE=telethon`,
-   then `docker compose up -d migrate ingestor`.
-
-### Experiment plan mapping (handoff §9)
-
-- **Week 1, shadow:** `mode: shadow` rules record "would have traded" in `shadow_trades`.
-- **Week 2, demo execution:** enable `rule_gold_mt5` (MT5 bridge, compose profile `mt5`) and
-  `rule_synth_deriv` (Deriv options demo) after filling `PS_MT5_*` / `PS_DERIV_*`.
-- **Weeks 3–4, measure:** `signals` (parse/reject rate per channel), `orders.latency_ms`
-  (post → broker ack), `orders.error`, `positions` (follow-ups applied).
+With `PS_INGESTOR_FAKE_TELEGRAM=1` the Telegram screens accept code **12345** (or 11111, then
+password `demo`, to see the two-step screen). Never set it in production.
 
 ## Tests
 
 ```bash
-pip install -e ".[dev]"
-source scripts/test-infra.sh   # throwaway Postgres + redis-server, no Docker needed
-pytest -q
+php artisan test                         # Laravel
+npm run typecheck                        # React
+PS_TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:55432/postgres pytest -q engine/tests
 ```
 
-The end-to-end test replays posts through all services, each on its own Redis ACL user, and
-checks sizing, multi-TP split, "move SL to entry", partial close, filters, shadow mode,
-dedupe, and that forged or replayed intents are refused.
+## Deploy with NanoDeploi
 
-## Deploy
+Site: *Use repository docker-compose.yml*, ingress service **nginx**, port **80**.
 
-The compose file is the deploy unit (works with NanoDeploi or plain `docker compose` on the
-VPS). Only `core-api` publishes a port, bound to 127.0.0.1; front it with a TLS reverse proxy.
+- Build commands: `php: composer install --no-dev --optimize-autoloader`, `node: npm ci && npm run build`
+- Release commands: `php: php artisan migrate --force`, `php: php artisan optimize`, `php: php artisan queue:restart`
+- Site-root `.env`: the output of `pipstream keys` (run it once in the engine container), plus
+  `PS_APP_DIR=./src`, `PS_TELEGRAM_API_ID` and `PS_TELEGRAM_API_HASH`
+- `src/.env`: Laravel settings from `.env.example` (APP_KEY, Paystack, bot token, mail)
+
+`docker-compose.yml` shows what runs where. Architecture notes are in `docs/architecture.md`.

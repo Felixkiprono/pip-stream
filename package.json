@@ -1,0 +1,11 @@
+{
+  "name": "pipstream",
+  "private": true,
+  "workspaces": ["web"],
+  "scripts": {
+    "build": "npm run build -w web",
+    "dev": "npm run dev -w web",
+    "test": "npm run test -w web",
+    "typecheck": "npm run typecheck -w web"
+  }
+}

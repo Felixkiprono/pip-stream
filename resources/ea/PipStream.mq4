@@ -12,7 +12,7 @@
 //+------------------------------------------------------------------+
 #property copyright "PipStream"
 #property link      "https://pip.stream"
-#property version   "1.10"
+#property version   "1.11"
 #property description "Places, updates and closes the trades from the Telegram channels you copy in PipStream."
 #property strict
 
@@ -23,6 +23,7 @@ input int    SlippagePoints = 30;                  // Max slippage for market or
 #define PS_MAGIC 770077
 #define PS_VERSION "1.11"
 #define PS_KEY_FILE "PipStream.key"
+#define PS_CODE_LABEL "PipStreamPairCode"
 
 string   g_results = "";
 string   g_done[];
@@ -401,7 +402,6 @@ void Pair()
    Show();
 }
 
-#define PS_CODE_LABEL "PipStreamPairCode"
 void ShowCode(const string text)
 {
    if(text == "")

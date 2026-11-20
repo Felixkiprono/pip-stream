@@ -57,6 +57,7 @@ Route::middleware(['auth', 'active'])->group(function () {
     Route::post('brokers', [BrokerController::class, 'store']);
     Route::post('brokers/pair', [BrokerController::class, 'pair']);
     Route::get('brokers/pair/status', [BrokerController::class, 'pairStatus']);
+    Route::post('brokers/installer', [BrokerController::class, 'installer'])->middleware('throttle:10,1');
     Route::get('brokers/{broker}', [BrokerController::class, 'show']);
     Route::post('brokers/{broker}/test', [BrokerController::class, 'test']);
     Route::get('brokers/{broker}/test/{test}', [BrokerController::class, 'testResult']);

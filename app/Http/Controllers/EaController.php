@@ -60,13 +60,24 @@ class EaController extends Controller
     /** The EA source with the server address preset, so the customer never has to type it. */
     public function download(Request $r, string $ext)
     {
+        if (str_starts_with($ext, 'ex')) {
+            return $this->built($ext);
+        }
         $src = file_get_contents(resource_path("ea/PipStream.{$ext}"));
         $url = self::eaUrl($r);
-        $src = preg_replace('/input string PipStreamUrl = "[^"]*";/', 'input string PipStreamUrl = "'.addcslashes($url, '"\\').'";', $src, 1);
+        $src = preg_replace('/#define PS_DEFAULT_URL "[^"]*"/', '#define PS_DEFAULT_URL "'.addcslashes($url, '"\\').'"', $src, 1);
 
         return response($src)->header('Content-Type', 'application/octet-stream')
             ->header('Content-Disposition', "attachment; filename=\"PipStream.{$ext}\"")
             ->header('Cache-Control', 'no-store');
+    }
+
+    private function built(string $ext)
+    {
+        $f = resource_path("ea/build/PipStream.{$ext}");
+        abort_unless(is_file($f), 404);
+
+        return response()->download($f, "PipStream.{$ext}", ['Content-Type' => 'application/octet-stream', 'Cache-Control' => 'no-cache']);
     }
 
     /** "Has a MetaTrader reached us from where you are?" so the app can say what's happening before the code is typed. */
@@ -85,6 +96,16 @@ class EaController extends Controller
     public function pair(Request $r)
     {
         $text = fn (string $s, int $code = 200) => response($s."\n", $code)->header('Content-Type', 'text/plain');
+        $install = (string) $r->input('install', '');
+        if (preg_match('/^pst_[A-Za-z0-9]{40}$/', $install) && ($it = Cache::pull('ea-install:'.hash('sha256', $install)))) {
+            $b = BrokerAccount::where('id', $it['broker_id'])->where('connector', 'ea_bridge')->first();
+            if ($b) {
+                $key = self::link($b, $this->pairingInfo($r));
+                $this->bus->publish('config.changed', ['entity' => 'broker_account', 'entity_id' => $b->id]);
+
+                return $text('KEY|'.$key);
+            }
+        }
         $token = preg_replace('/[^A-Za-z0-9]/', '', (string) $r->input('token', ''));
         if ($token !== '' && ($p = Cache::get("ea-pair:{$token}"))) {
             if (! empty($p['key'])) {
@@ -97,14 +118,11 @@ class EaController extends Controller
 
             return $text('WAIT|'.$p['code']);
         }
-        $info = fn (string $k, int $max) => mb_substr(preg_replace('/[|\r\n]/', '', (string) $r->input($k, '')), 0, $max);
         do {
             $code = (string) random_int(100000, 999999);
         } while (Cache::has("ea-pair-code:{$code}"));
         $token = Str::random(40);
-        Cache::put("ea-pair:{$token}", ['code' => $code, 'key' => null,
-            'platform' => $r->input('platform') === 'mt4' ? 'mt4' : 'mt5',
-            'login' => $info('login', 30), 'server' => $info('server', 80), 'company' => $info('company', 80)], now()->addMinutes(15));
+        Cache::put("ea-pair:{$token}", ['code' => $code, 'key' => null] + $this->pairingInfo($r), now()->addMinutes(15));
         Cache::put("ea-pair-code:{$code}", $token, now()->addMinutes(15));
         $this->markSeen($r);
 
@@ -115,6 +133,54 @@ class EaController extends Controller
     {
         $p ??= ['platform' => $r->input('platform') === 'mt4' ? 'mt4' : 'mt5', 'company' => mb_substr((string) $r->input('company', ''), 0, 80)];
         Cache::put('ea-pair-ip:'.hash('sha256', (string) $r->ip()), ['platform' => $p['platform'], 'company' => $p['company'], 'at' => time()], now()->addMinutes(15));
+    }
+
+    private function pairingInfo(Request $r): array
+    {
+        $info = fn (string $k, int $max) => mb_substr(preg_replace('/[|\r\n]/', '', (string) $r->input($k, '')), 0, $max);
+
+        return ['platform' => $r->input('platform') === 'mt4' ? 'mt4' : 'mt5',
+            'login' => $info('login', 30), 'server' => $info('server', 80), 'company' => $info('company', 80)];
+    }
+
+    /** Give an EA row a fresh key and name it after the terminal ("MetaTrader 5 · Exness 71908446"). Returns the key. */
+    public static function link(BrokerAccount $b, array $p): string
+    {
+        if ($old = ($b->symbol_map['_ea_key_hash'] ?? null)) {
+            Cache::forget("ea-key:{$old}");  // the old key stops working at once
+        }
+        $key = 'psk_'.Str::random(40);
+        $mt = $p['platform'] === 'mt4' ? 'MetaTrader 4' : 'MetaTrader 5';
+        $label = mb_substr(trim($mt.' · '.($p['company'] ?: $p['server']).($p['login'] ? ' '.$p['login'] : ''), ' ·'), 0, 60);
+        $b->update(['label' => $label, 'enabled' => true, 'symbol_map' => array_merge((array) $b->symbol_map, [
+            '_platform' => $p['platform'], '_ea_key_hash' => self::hashKey($key),
+            '_login_hint' => $p['login'] ? '•••'.substr($p['login'], -3) : null])]);
+
+        return $key;
+    }
+
+    /** One-time token baked into an installer: the EA trades it for its key on first contact. */
+    public static function makeInstallToken(BrokerAccount $b, string $platform): string
+    {
+        $t = 'pst_'.Str::random(40);
+        Cache::put('ea-install:'.hash('sha256', $t), ['broker_id' => $b->id, 'platform' => $platform], now()->addDay());
+
+        return $t;
+    }
+
+    /** The setup script behind the one-line command (curl ... | bash, or irm ... | iex). Valid until the EA uses the token. */
+    public function installScript(Request $r, string $token, string $ext)
+    {
+        $it = preg_match('/^pst_[A-Za-z0-9]{40}$/', $token) ? Cache::get('ea-install:'.hash('sha256', $token)) : null;
+        if (! $it) {
+            $msg = 'This PipStream setup link has expired or was already used. Get a new one in PipStream > Brokers.';
+
+            return response($ext === 'sh' ? "echo '{$msg}'\n" : "Write-Host '{$msg}'\r\n", 404)->header('Content-Type', 'text/plain');
+        }
+        $script = strtr(file_get_contents(resource_path($ext === 'sh' ? 'ea/install-mac.sh' : 'ea/install-windows.ps1')), [
+            '__URL__' => self::eaUrl($r), '__TOKEN__' => $token, '__MT__' => $it['platform'] === 'mt4' ? '4' : '5']);
+
+        return response($script)->header('Content-Type', 'text/plain; charset=utf-8')->header('Cache-Control', 'no-store');
     }
 
     /** The customer typed the code shown on their chart: create the account and hand the EA its key. */

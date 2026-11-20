@@ -94,26 +94,40 @@ class BrokerController extends Controller
         if (! $p) {
             throw \Illuminate\Validation\ValidationException::withMessages(['code' => 'That code is not valid or has expired. Check the code on your chart.']);
         }
-        $key = 'psk_'.Str::random(40);
-        $mt = $p['platform'] === 'mt4' ? 'MetaTrader 4' : 'MetaTrader 5';
-        $label = mb_substr(trim($mt.' · '.($p['company'] ?: $p['server']).($p['login'] ? ' '.$p['login'] : ''), ' ·'), 0, 60);
-        $map = ['_platform' => $p['platform'], '_ea_key_hash' => EaController::hashKey($key),
-            '_login_hint' => $p['login'] ? '•••'.substr($p['login'], -3) : null];
-        if ($existing) {
-            $b = $existing;
-            if ($old = ($b->symbol_map['_ea_key_hash'] ?? null)) {
-                Cache::forget("ea-key:{$old}");  // the old key stops working at once
-            }
-            $b->update(['label' => $label, 'enabled' => true, 'symbol_map' => array_merge((array) $b->symbol_map, $map)]);
-        } else {
-            $b = BrokerAccount::create(['user_id' => $u->id, 'connector' => 'ea_bridge', 'label' => $label,
-                'credentials_ciphertext' => null, 'enabled' => true, 'symbol_map' => $map]);
-        }
+        $b = $existing ?? BrokerAccount::create(['user_id' => $u->id, 'connector' => 'ea_bridge', 'label' => 'MetaTrader',
+            'credentials_ciphertext' => null, 'enabled' => true, 'symbol_map' => []]);
+        $key = EaController::link($b, $p);
         EaController::deliverKey($p['token'], $p, $key);
         AuditLog::record($u->id, $existing ? 'broker_relinked' : 'broker_added', 'broker_account', $b->id);
         $bus->publish('config.changed', ['entity' => 'broker_account', 'entity_id' => $b->id]);
 
         return ['broker' => $this->present($b)];
+    }
+
+    /** One-click setup: a one-line command for Mac or Windows that installs the EA, allows the address and links it. */
+    public function installer(Request $r)
+    {
+        $data = $r->validate(['platform' => ['required', Rule::in(['mt4', 'mt5'])],
+            'broker_id' => ['sometimes', 'nullable', 'string']]);
+        $u = $r->user();
+        $b = ! empty($data['broker_id'])
+            ? BrokerAccount::where('id', $data['broker_id'])->where('user_id', $u->id)->where('connector', 'ea_bridge')->firstOrFail()
+            : null;
+        if (! $b) {
+            $max = $u->billing?->plan?->max_accounts ?? 1;
+            abort_if($u->brokerAccounts()->where('connector', '!=', 'paper')->where('enabled', true)->count() >= $max, 402,
+                "Your plan allows {$max} broker account(s).");
+            $b = BrokerAccount::create(['user_id' => $u->id, 'connector' => 'ea_bridge',
+                'label' => ($data['platform'] === 'mt4' ? 'MetaTrader 4' : 'MetaTrader 5').' (installing)',
+                'credentials_ciphertext' => null, 'enabled' => true, 'symbol_map' => ['_platform' => $data['platform']]]);
+            AuditLog::record($u->id, 'broker_added', 'broker_account', $b->id);
+        }
+        $token = EaController::makeInstallToken($b, $data['platform']);
+        $base = EaController::eaUrl($r)."/ea/install/{$token}";
+
+        return ['broker' => $this->present($b),
+            'mac' => "curl -fsSL {$base}.sh | bash",
+            'windows' => "irm {$base}.ps1 | iex"];
     }
 
     /** Live help while pairing: the address the EA must reach, and whether a MetaTrader from here already reached it. */
@@ -174,6 +188,9 @@ class BrokerController extends Controller
             'token' => ['required_if:connector,deriv_options', 'nullable', 'string', 'max:200'],
         ]);
         $u = $r->user();
+        // hosted MetaTrader costs us per account, so it's a paid-plan feature; the EA stays free
+        abort_if($data['connector'] === 'metaapi' && ($u->billing?->plan?->id ?? 'trial') === 'trial', 402,
+            'Hosted MetaTrader is part of Pro. Upgrade in Plan & billing, or use the free MetaTrader EA.');
         $max = $u->billing?->plan?->max_accounts ?? 1;
         abort_if($u->brokerAccounts()->where('connector', '!=', 'paper')->count() >= $max, 402,
             "Your plan allows {$max} broker account(s).");

@@ -17,7 +17,8 @@
 #include <Trade\Trade.mqh>
 
 input string PipStreamKey = "";                    // Optional: leave empty and pair with the code shown on the chart
-input string PipStreamUrl = "http://127.0.0.1:8000";  // Server (add it under Tools > Options > Expert Advisors)
+#define PS_DEFAULT_URL "http://127.0.0.1:8000"
+input string PipStreamUrl = PS_DEFAULT_URL;  // Server (add it under Tools > Options > Expert Advisors)
 input int    SlippagePoints = 30;                  // Max slippage for market orders, in points
 
 #define PS_MAGIC 770077
@@ -36,10 +37,22 @@ string   g_status = "starting";
 string   g_key = "";            // from the input, or saved after pairing
 string   g_pair_token = "";
 string   g_pair_code = "";
+string   g_url = "";            // PipStreamUrl, or the address the installer left in PipStream.url
+string   g_install = "";        // one-time token the installer left in PipStream.pair
 
 //+------------------------------------------------------------------+
 int OnInit()
 {
+   // the one-click installer leaves the address and a one-time token next to the EA
+   g_url = PipStreamUrl;
+   string file_url = ReadLine("PipStream.url");
+   if(PipStreamUrl == PS_DEFAULT_URL && StringFind(file_url, "http") == 0)
+      g_url = file_url;
+   while(StringLen(g_url) > 0 && StringSubstr(g_url, StringLen(g_url) - 1) == "/")
+      g_url = StringSubstr(g_url, 0, StringLen(g_url) - 1);
+   g_install = ReadLine("PipStream.pair");
+   if(StringFind(g_install, "pst_") != 0)
+      g_install = "";
    g_key = PipStreamKey;
    StringTrimLeft(g_key);
    StringTrimRight(g_key);
@@ -224,7 +237,7 @@ void Sync(const bool force_state)
       len = 0;
    ArrayResize(data, len);
    string headers = "Content-Type: application/json\r\nX-PipStream-Key: " + g_key + "\r\n";
-   string url = PipStreamUrl + "/ea/v1/sync";
+   string url = g_url + "/ea/v1/sync";
 
    ResetLastError();
    int code = WebRequest("POST", url, headers, 5000, data, reply, reply_headers);
@@ -232,7 +245,7 @@ void Sync(const bool force_state)
    {
       int err = GetLastError();
       if(err == 4014)
-         g_status = "Add " + PipStreamUrl + " under Tools > Options > Expert Advisors > Allow WebRequest";
+         g_status = "Add " + g_url + " under Tools > Options > Expert Advisors > Allow WebRequest";
       else
          g_status = "Can't reach PipStream (error " + (string)err + "), retrying";
       Show();
@@ -288,6 +301,20 @@ void Sync(const bool force_state)
 //| pairing: no key -> show a 6-digit code, the customer types it    |
 //| in PipStream, we receive our key and keep it in MQL Files        |
 //+------------------------------------------------------------------+
+string ReadLine(const string name)
+{
+   if(!FileIsExist(name))
+      return("");
+   int h = FileOpen(name, FILE_READ | FILE_TXT | FILE_ANSI);
+   if(h == INVALID_HANDLE)
+      return("");
+   string k = FileReadString(h);
+   FileClose(h);
+   StringTrimLeft(k);
+   StringTrimRight(k);
+   return(k);
+}
+
 string LoadKey()
 {
    int h = FileOpen(PS_KEY_FILE, FILE_READ | FILE_TXT | FILE_ANSI);
@@ -316,7 +343,7 @@ void SaveKey(const string k)
 
 void Pair()
 {
-   string body = "{\"token\":\"" + g_pair_token + "\",\"platform\":\"mt5\"" +
+   string body = "{\"token\":\"" + g_pair_token + "\",\"install\":\"" + g_install + "\",\"platform\":\"mt5\"" +
                  ",\"login\":\"" + (string)AccountInfoInteger(ACCOUNT_LOGIN) + "\"" +
                  ",\"server\":\"" + Esc(AccountInfoString(ACCOUNT_SERVER)) + "\"" +
                  ",\"company\":\"" + Esc(AccountInfoString(ACCOUNT_COMPANY)) + "\"}";
@@ -328,12 +355,12 @@ void Pair()
       len = 0;
    ArrayResize(data, len);
    ResetLastError();
-   int code = WebRequest("POST", PipStreamUrl + "/ea/v1/pair", "Content-Type: application/json\r\n", 5000, data, reply, reply_headers);
+   int code = WebRequest("POST", g_url + "/ea/v1/pair", "Content-Type: application/json\r\n", 5000, data, reply, reply_headers);
    if(code != 200)
    {
       int err = GetLastError();
       if(code == -1 && (err == 4014 || err == 4060))
-         g_status = "Step 1: add " + PipStreamUrl + " under Tools > Options > Expert Advisors > Allow WebRequest";
+         g_status = "Step 1: add " + g_url + " under Tools > Options > Expert Advisors > Allow WebRequest";
       else if(code == -1)
          g_status = "Can't reach PipStream (error " + IntegerToString(err) + "), retrying";
       else
@@ -358,6 +385,11 @@ void Pair()
       SaveKey(g_key);
       g_pair_token = "";
       g_pair_code = "";
+      if(g_install != "")
+      {
+         FileDelete("PipStream.pair");
+         g_install = "";
+      }
       g_status = "Linked";
       Sync(true);
       return;

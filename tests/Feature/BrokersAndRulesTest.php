@@ -33,6 +33,10 @@ class BrokersAndRulesTest extends TestCase
     public function test_metatrader_via_metaapi_is_sealed_and_shows_connection_status(): void
     {
         $u = $this->customer();
+        $this->actingAs($u)->postJson('/api/v1/brokers', ['connector' => 'metaapi', 'platform' => 'mt5',
+            'login' => '1', 'password' => 'x', 'server' => 's'])->assertStatus(402);  // hosted is a paid-plan feature
+        DB::table('billing_subscriptions')->where('user_id', $u->id)->update(['plan_id' => 'pro', 'status' => 'active']);
+        $u->refresh();
         $res = $this->actingAs($u)->postJson('/api/v1/brokers', ['connector' => 'metaapi', 'platform' => 'mt4',
             'login' => ' 51234567 ', 'password' => 'Hunter2-Secret!', 'server' => 'Exness-MT4Trial7']);
         $res->assertOk()->assertJsonPath('broker.label', 'MetaTrader 4 · Exness-MT4Trial7')

@@ -133,12 +133,12 @@ class EaBridgeTest extends TestCase
     public function test_ea_download_carries_the_address_it_was_downloaded_from(): void
     {
         $res = $this->get('http://127.0.0.1:8000/ea/PipStream.mq5')->assertOk();
-        $this->assertStringContainsString('input string PipStreamUrl = "http://127.0.0.1:8000";', $res->getContent());
+        $this->assertStringContainsString('#define PS_DEFAULT_URL "http://127.0.0.1:8000"', $res->getContent());
         $this->assertStringContainsString('attachment; filename="PipStream.mq5"', $res->headers->get('Content-Disposition'));
 
         config(['pipstream.ea_url' => 'https://pip.stream/']);
-        $this->assertStringContainsString('input string PipStreamUrl = "https://pip.stream";', $this->get('/ea/PipStream.mq4')->getContent());
-        $this->get('/ea/PipStream.ex9')->assertDontSee('input string');
+        $this->assertStringContainsString('#define PS_DEFAULT_URL "https://pip.stream"', $this->get('/ea/PipStream.mq4')->getContent());
+        $this->get('/ea/PipStream.ex9')->assertDontSee('PS_DEFAULT_URL');
     }
 
     public function test_pair_status_says_when_a_terminal_from_here_has_reached_us(): void
@@ -163,5 +163,36 @@ class EaBridgeTest extends TestCase
         $key = substr(trim($this->call('POST', '/ea/v1/pair', [], [], [], ['CONTENT_TYPE' => 'application/json'], json_encode(['token' => $token]))->getContent()), 4);
         $this->call('POST', '/ea/v1/sync', [], [], [], ['HTTP_X-PipStream-Key' => $key])->assertOk();
         $this->call('POST', '/ea/v1/sync', [], [], [], ['HTTP_X-PipStream-Key' => $oldKey])->assertStatus(401);
+    }
+
+    public function test_one_line_setup_links_the_terminal_without_a_code(): void
+    {
+        $u = $this->customer();
+        $res = $this->actingAs($u)->postJson('http://127.0.0.1:8000/api/v1/brokers/installer', ['platform' => 'mt5'])->assertOk();
+        $this->assertMatchesRegularExpression('#^curl -fsSL http://127\.0\.0\.1:8000/ea/install/pst_[A-Za-z0-9]{40}\.sh \| bash$#', $res->json('mac'));
+        $this->assertMatchesRegularExpression('#^irm http://127\.0\.0\.1:8000/ea/install/pst_[A-Za-z0-9]{40}\.ps1 \| iex$#', $res->json('windows'));
+        $id = $res->json('broker.id');
+        preg_match('#(pst_[A-Za-z0-9]{40})#', $res->json('mac'), $m);
+        $token = $m[1];
+
+        $sh = $this->get("http://127.0.0.1:8000/ea/install/{$token}.sh")->assertOk()->getContent();
+        $this->assertStringContainsString('URL="http://127.0.0.1:8000"', $sh);
+        $this->assertStringContainsString("TOKEN=\"{$token}\"", $sh);
+        $this->assertStringContainsString('MT="5"', $sh);
+        $this->assertStringContainsString("\$Token = '{$token}'", $this->get("/ea/install/{$token}.ps1")->getContent());
+
+        // the EA trades the token for its key on first contact, once
+        $ea = fn () => $this->call('POST', '/ea/v1/pair', [], [], [], ['CONTENT_TYPE' => 'application/json'],
+            json_encode(['install' => $token, 'platform' => 'mt5', 'login' => '71908446', 'company' => 'Exness']))->getContent();
+        $got = trim($ea());
+        $this->assertStringStartsWith('KEY|psk_', $got);
+        $this->call('POST', '/ea/v1/sync', [], [], [], ['HTTP_X-PipStream-Key' => substr($got, 4)])->assertOk();
+        $this->assertSame('MetaTrader 5 · Exness 71908446', BrokerAccount::find($id)->label);
+        $this->assertStringStartsWith('PAIR|', $ea());  // used up: falls back to a code
+        $this->get("/ea/install/{$token}.sh")->assertNotFound();
+
+        // the same row can get a fresh command
+        $this->actingAs($u)->postJson('/api/v1/brokers/installer', ['platform' => 'mt5', 'broker_id' => $id])->assertJsonPath('broker.id', $id);
+        $this->get('/ea/PipStream.ex5')->assertNotFound();  // no ready-built EA in the repo yet: 404, never the app's HTML
     }
 }

@@ -91,7 +91,16 @@ export default function Brokers() {
               <X className="size-5" />
             </button>
           </div>
-          <EaSetup broker={guide.broker} eaKey={guide.key} />
+          <EaSetup
+            broker={guide.broker}
+            eaKey={guide.key}
+            onLinked={(broker) => {
+              setGuide(null)
+              setTesting(broker.id)
+              setJustPaired(broker.id)
+              refresh()
+            }}
+          />
           {!guide.key && (
             <Button
               variant="soft"

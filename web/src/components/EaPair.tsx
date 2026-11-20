@@ -87,23 +87,6 @@ export function EaPair({ onPaired }: { onPaired: (b: Broker) => void }) {
   const file = useEaFile(mt, status.data?.ea_url).data ?? `/ea/PipStream.mq${mt}`
   const seen = status.data?.seen
   const waited = useElapsed()
-  const [code, setCode] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [err, setErr] = useState<ApiError | null>(null)
-
-  async function pair(e: React.FormEvent) {
-    e.preventDefault()
-    setBusy(true)
-    setErr(null)
-    try {
-      const r = await post<{ broker: Broker }>('brokers/pair', { code: code.replace(/\D/g, '') })
-      onPaired(r.broker)
-    } catch (e) {
-      setErr(e as ApiError)
-    } finally {
-      setBusy(false)
-    }
-  }
 
   return (
     <div className="space-y-5">
@@ -139,27 +122,12 @@ export function EaPair({ onPaired }: { onPaired: (b: Broker) => void }) {
         </Li>
         <Li n={3} title="Drag PipStream onto any chart">
           <p className="text-sm text-ink-2">
-            Press OK, and turn on <b>{mt === 4 ? 'AutoTrading' : 'Algo Trading'}</b> in the toolbar. A 6-digit code appears at the top left of the chart.
+            Press OK, and turn on <b>{mt === 4 ? 'AutoTrading' : 'Algo Trading'}</b> in the toolbar. A 6-digit code appears in big gold text on the chart.
             Had an older PipStream on a chart? Remove it first, then drag this new one on.
           </p>
         </Li>
         <Li n={4} title="Type the code here">
-          <form onSubmit={pair} className="flex gap-2">
-            <input
-              inputMode="numeric"
-              autoComplete="one-time-code"
-              placeholder="123 456"
-              maxLength={7}
-              value={code}
-              onChange={(e) => setCode(e.target.value.replace(/[^\d ]/g, ''))}
-              aria-label="Code from your chart"
-              className="min-h-12 w-full min-w-0 rounded-2xl border border-line bg-surface px-4 text-center font-mono text-xl tracking-[0.3em] tabular"
-            />
-            <Button type="submit" busy={busy} disabled={code.replace(/\D/g, '').length !== 6}>
-              Link
-            </Button>
-          </form>
-          {err && <ErrorNote>{err.field('code') ?? err.message}</ErrorNote>}
+          <CodeForm onLinked={onPaired} />
         </Li>
       </ol>
 
@@ -170,7 +138,7 @@ export function EaPair({ onPaired }: { onPaired: (b: Broker) => void }) {
             <span>
               Your MetaTrader {seen.platform === 'mt4' ? '4' : '5'}
               {seen.company ? ` (${seen.company})` : ''} reached PipStream.
-              <span className="block font-normal text-ink-2">Type the 6-digit code from the top left of its chart above.</span>
+              <span className="block font-normal text-ink-2">Type the 6-digit code shown on its chart above.</span>
             </span>
           </p>
         ) : (
@@ -183,6 +151,46 @@ export function EaPair({ onPaired }: { onPaired: (b: Broker) => void }) {
         )}
       </div>
     </div>
+  )
+}
+
+/** The 6-digit code from the chart. With brokerId, it links that existing row instead of adding one. */
+export function CodeForm({ brokerId, onLinked }: { brokerId?: string; onLinked: (b: Broker) => void }) {
+  const [code, setCode] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState<ApiError | null>(null)
+  async function submit(e: React.FormEvent) {
+    e.preventDefault()
+    setBusy(true)
+    setErr(null)
+    try {
+      const r = await post<{ broker: Broker }>('brokers/pair', { code: code.replace(/\D/g, ''), broker_id: brokerId })
+      onLinked(r.broker)
+    } catch (e) {
+      setErr(e as ApiError)
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <>
+      <form onSubmit={submit} className="flex gap-2">
+        <input
+          inputMode="numeric"
+          autoComplete="one-time-code"
+          placeholder="123 456"
+          maxLength={7}
+          value={code}
+          onChange={(e) => setCode(e.target.value.replace(/[^\d ]/g, ''))}
+          aria-label="Code from your chart"
+          className="min-h-12 w-full min-w-0 rounded-2xl border border-line bg-surface px-4 text-center font-mono text-xl tracking-[0.3em] tabular"
+        />
+        <Button type="submit" busy={busy} disabled={code.replace(/\D/g, '').length !== 6}>
+          Link
+        </Button>
+      </form>
+      {err && <ErrorNote>{err.field('code') ?? err.message}</ErrorNote>}
+    </>
   )
 }
 

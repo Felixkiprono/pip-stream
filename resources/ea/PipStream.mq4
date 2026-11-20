@@ -21,7 +21,7 @@ input string PipStreamUrl = "http://127.0.0.1:8000";  // Server (add it under To
 input int    SlippagePoints = 30;                  // Max slippage for market orders, in points
 
 #define PS_MAGIC 770077
-#define PS_VERSION "1.10"
+#define PS_VERSION "1.11"
 #define PS_KEY_FILE "PipStream.key"
 
 string   g_results = "";
@@ -59,6 +59,7 @@ void OnDeinit(const int reason)
 {
    EventKillTimer();
    Comment("");
+   ObjectDelete(0, PS_CODE_LABEL);
 }
 
 void OnTimer()
@@ -400,6 +401,29 @@ void Pair()
    Show();
 }
 
+#define PS_CODE_LABEL "PipStreamPairCode"
+void ShowCode(const string text)
+{
+   if(text == "")
+   {
+      ObjectDelete(0, PS_CODE_LABEL);
+      return;
+   }
+   if(ObjectFind(0, PS_CODE_LABEL) < 0)
+   {
+      ObjectCreate(0, PS_CODE_LABEL, OBJ_LABEL, 0, 0, 0);
+      ObjectSetInteger(0, PS_CODE_LABEL, OBJPROP_CORNER, CORNER_LEFT_UPPER);
+      ObjectSetInteger(0, PS_CODE_LABEL, OBJPROP_XDISTANCE, 12);
+      ObjectSetInteger(0, PS_CODE_LABEL, OBJPROP_YDISTANCE, 70);
+      ObjectSetInteger(0, PS_CODE_LABEL, OBJPROP_FONTSIZE, 28);
+      ObjectSetString(0, PS_CODE_LABEL, OBJPROP_FONT, "Arial Bold");
+      ObjectSetInteger(0, PS_CODE_LABEL, OBJPROP_COLOR, clrGold);
+      ObjectSetInteger(0, PS_CODE_LABEL, OBJPROP_SELECTABLE, false);
+   }
+   ObjectSetString(0, PS_CODE_LABEL, OBJPROP_TEXT, text);
+   ChartRedraw(0);
+}
+
 void Show()
 {
    bool allowed = IsTradeAllowed() && (TerminalInfoInteger(TERMINAL_TRADE_ALLOWED) != 0);
@@ -408,6 +432,8 @@ void Show()
       s += "\nAutoTrading is OFF: turn it on in the toolbar so trades can be placed";
    if(g_last_ok > 0)
       s += "\nLast check-in " + TimeToString(g_last_ok, TIME_SECONDS);
+   bool pairing = (g_pair_code != "" && StringFind(g_status, "Enter this code") == 0);
+   ShowCode(pairing ? "PipStream code: " + StringSubstr(g_pair_code, 0, 3) + " " + StringSubstr(g_pair_code, 3) : "");
    Comment(s);
 }
 

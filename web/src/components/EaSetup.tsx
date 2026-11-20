@@ -3,10 +3,11 @@ import { AlertTriangle, Check, CheckCircle2, Copy, Download, Loader2 } from 'luc
 import { useState } from 'react'
 import { api } from '../lib/api'
 import type { Broker } from '../lib/types'
-import { InstallHint, Troubleshoot, useElapsed, usePairStatus } from './EaPair'
+import { CodeForm, InstallHint, Troubleshoot, useElapsed, usePairStatus } from './EaPair'
 
 /** Step-by-step install of the PipStream EA, with the key (shown once) and live status. */
-export function EaSetup({ broker, eaKey }: { broker: Broker; eaKey?: string | null }) {
+export function EaSetup({ broker, eaKey, onLinked }: { broker: Broker; eaKey?: string | null; onLinked: (b: Broker) => void }) {
+  const [showKey, setShowKey] = useState(!!eaKey)
   const mt = broker.platform === 'mt4' ? 4 : 5
   const eaUrl = usePairStatus(false).data?.ea_url ?? window.location.origin
   const waited = useElapsed()
@@ -40,21 +41,33 @@ export function EaSetup({ broker, eaKey }: { broker: Broker; eaKey?: string | nu
           </p>
           <CopyRow value={eaUrl} />
         </Li>
-        <Li n={3} title="Put it on one chart and paste your key">
+        <Li n={3} title="Drag PipStream onto one chart">
           <p className="text-sm text-ink-2">
-            Drag <b>PipStream</b> from the Navigator onto any chart (just one). In <b>Inputs</b>, paste your key into the first box (the server address
-            is already filled in). Make sure <b>{mt === 4 ? 'AutoTrading' : 'Algo Trading'}</b> is on in the toolbar.
+            Leave the settings as they are (the server address is already filled in), press OK, and turn on{' '}
+            <b>{mt === 4 ? 'AutoTrading' : 'Algo Trading'}</b> in the toolbar. A 6-digit code appears in big gold text on the chart.
           </p>
-          {eaKey ? (
-            <>
-              <CopyRow value={eaKey} secret />
-              <p className="mt-1 text-xs text-ink-3">Shown only now. Lost it? Make a new key from this broker's menu; the old one stops working.</p>
-            </>
+        </Li>
+        <Li n={4} title="Type the code here">
+          <CodeForm brokerId={broker.id} onLinked={onLinked} />
+          {showKey ? (
+            <div className="mt-3 space-y-1">
+              <p className="text-sm text-ink-2">Or paste this key into the first box of the EA's Inputs instead of using a code:</p>
+              {eaKey ? (
+                <>
+                  <CopyRow value={eaKey} secret />
+                  <p className="text-xs text-ink-3">Shown only now. Lost it? Make a new key below; the old one stops working.</p>
+                </>
+              ) : (
+                <p className="text-sm text-ink-3">Use the key you saved when you added this account, or make a new one below.</p>
+              )}
+            </div>
           ) : (
-            <p className="mt-1 text-sm text-ink-3">Use the key you saved when you added this account, or make a new one.</p>
+            <button type="button" className="mt-3 text-sm font-semibold text-ink-3 underline" onClick={() => setShowKey(true)}>
+              Prefer to paste a key into the EA?
+            </button>
           )}
         </Li>
-        <Li n={4} title={`Keep MetaTrader ${mt} open`}>
+        <Li n={5} title={`Keep MetaTrader ${mt} open`}>
           <p className="text-sm text-ink-2">
             Trades are placed by your terminal, so it must stay running: on your computer, a VPS, or MetaQuotes' built-in hosting (right-click your account in
             the Navigator → <b>Register a Virtual Server</b>).

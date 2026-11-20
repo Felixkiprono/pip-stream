@@ -148,4 +148,20 @@ class EaBridgeTest extends TestCase
         $this->call('POST', '/ea/v1/pair', [], [], [], ['CONTENT_TYPE' => 'application/json'], json_encode(['platform' => 'mt5', 'company' => 'Exness']))->assertOk();
         $this->getJson('/api/v1/brokers/pair/status')->assertJsonPath('seen.company', 'Exness')->assertJsonPath('seen.platform', 'mt5');
     }
+
+    public function test_code_from_the_chart_links_an_existing_row_and_retires_its_old_key(): void
+    {
+        [$u, $broker, $oldKey] = $this->addEa();
+        $first = $this->call('POST', '/ea/v1/pair', [], [], [], ['CONTENT_TYPE' => 'application/json'], json_encode(['platform' => 'mt5', 'login' => '71908446', 'company' => 'Exness']))->getContent();
+        [, $token, $code] = explode('|', trim($first));
+
+        $this->actingAs($this->customer())->postJson('/api/v1/brokers/pair', ['code' => $code, 'broker_id' => $broker['id']])->assertNotFound();
+        $res = $this->actingAs($u)->postJson('/api/v1/brokers/pair', ['code' => $code, 'broker_id' => $broker['id']])->assertOk();
+        $res->assertJsonPath('broker.id', $broker['id'])->assertJsonPath('broker.label', 'MetaTrader 5 · Exness 71908446');
+        $this->assertSame(1, BrokerAccount::where('user_id', $u->id)->where('connector', 'ea_bridge')->count());
+
+        $key = substr(trim($this->call('POST', '/ea/v1/pair', [], [], [], ['CONTENT_TYPE' => 'application/json'], json_encode(['token' => $token]))->getContent()), 4);
+        $this->call('POST', '/ea/v1/sync', [], [], [], ['HTTP_X-PipStream-Key' => $key])->assertOk();
+        $this->call('POST', '/ea/v1/sync', [], [], [], ['HTTP_X-PipStream-Key' => $oldKey])->assertStatus(401);
+    }
 }

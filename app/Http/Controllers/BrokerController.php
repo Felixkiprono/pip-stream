@@ -78,24 +78,39 @@ class BrokerController extends Controller
     /** "Enter the code shown on your chart": pairs a running EA with this customer. */
     public function pair(Request $r, Bus $bus)
     {
-        $data = $r->validate(['code' => ['required', 'digits:6']]);
+        $data = $r->validate(['code' => ['required', 'digits:6'], 'broker_id' => ['sometimes', 'nullable', 'string']]);
         $u = $r->user();
-        $max = $u->billing?->plan?->max_accounts ?? 1;
-        abort_if($u->brokerAccounts()->where('connector', '!=', 'paper')->where('enabled', true)->count() >= $max, 402,
-            "Your plan allows {$max} broker account(s).");
+        // "Set up" on an existing EA row: the code links that row instead of adding a new one
+        $existing = ! empty($data['broker_id'])
+            ? BrokerAccount::where('id', $data['broker_id'])->where('user_id', $u->id)->where('connector', 'ea_bridge')->first()
+            : null;
+        abort_if(! empty($data['broker_id']) && ! $existing, 404);
+        if (! $existing) {
+            $max = $u->billing?->plan?->max_accounts ?? 1;
+            abort_if($u->brokerAccounts()->where('connector', '!=', 'paper')->where('enabled', true)->count() >= $max, 402,
+                "Your plan allows {$max} broker account(s).");
+        }
         $p = EaController::claimPairing($data['code']);
         if (! $p) {
             throw \Illuminate\Validation\ValidationException::withMessages(['code' => 'That code is not valid or has expired. Check the code on your chart.']);
         }
         $key = 'psk_'.Str::random(40);
         $mt = $p['platform'] === 'mt4' ? 'MetaTrader 4' : 'MetaTrader 5';
-        $label = trim($mt.' · '.($p['company'] ?: $p['server']).($p['login'] ? ' '.$p['login'] : ''), ' ·');
-        $b = BrokerAccount::create(['user_id' => $u->id, 'connector' => 'ea_bridge', 'label' => mb_substr($label, 0, 60),
-            'credentials_ciphertext' => null, 'enabled' => true,
-            'symbol_map' => ['_platform' => $p['platform'], '_ea_key_hash' => EaController::hashKey($key),
-                '_login_hint' => $p['login'] ? '•••'.substr($p['login'], -3) : null]]);
+        $label = mb_substr(trim($mt.' · '.($p['company'] ?: $p['server']).($p['login'] ? ' '.$p['login'] : ''), ' ·'), 0, 60);
+        $map = ['_platform' => $p['platform'], '_ea_key_hash' => EaController::hashKey($key),
+            '_login_hint' => $p['login'] ? '•••'.substr($p['login'], -3) : null];
+        if ($existing) {
+            $b = $existing;
+            if ($old = ($b->symbol_map['_ea_key_hash'] ?? null)) {
+                Cache::forget("ea-key:{$old}");  // the old key stops working at once
+            }
+            $b->update(['label' => $label, 'enabled' => true, 'symbol_map' => array_merge((array) $b->symbol_map, $map)]);
+        } else {
+            $b = BrokerAccount::create(['user_id' => $u->id, 'connector' => 'ea_bridge', 'label' => $label,
+                'credentials_ciphertext' => null, 'enabled' => true, 'symbol_map' => $map]);
+        }
         EaController::deliverKey($p['token'], $p, $key);
-        AuditLog::record($u->id, 'broker_added', 'broker_account', $b->id);
+        AuditLog::record($u->id, $existing ? 'broker_relinked' : 'broker_added', 'broker_account', $b->id);
         $bus->publish('config.changed', ['entity' => 'broker_account', 'entity_id' => $b->id]);
 
         return ['broker' => $this->present($b)];

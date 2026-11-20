@@ -3,7 +3,7 @@ import { AlertTriangle, Check, CheckCircle2, Copy, Download, Loader2 } from 'luc
 import { useState } from 'react'
 import { api } from '../lib/api'
 import type { Broker } from '../lib/types'
-import { Troubleshoot, useElapsed, usePairStatus } from './EaPair'
+import { InstallHint, Troubleshoot, useElapsed, usePairStatus } from './EaPair'
 
 /** Step-by-step install of the PipStream EA, with the key (shown once) and live status. */
 export function EaSetup({ broker, eaKey }: { broker: Broker; eaKey?: string | null }) {
@@ -29,10 +29,9 @@ export function EaSetup({ broker, eaKey }: { broker: Broker; eaKey?: string | nu
           >
             <Download className="size-4" /> PipStream.mq{mt}
           </a>
-          <p className="mt-2 text-sm text-ink-2">
-            In MetaTrader: <b>File → Open Data Folder → MQL{mt} → Experts</b>, put the file there, then right-click <b>Expert Advisors → Refresh</b> in
-            the Navigator. If it doesn't appear, open it in MetaEditor and press <b>Compile</b>.
-          </p>
+          <div className="mt-2 space-y-2">
+            <InstallHint mt={mt} source />
+          </div>
         </Li>
         <Li n={2} title="Allow it to reach PipStream">
           <p className="text-sm text-ink-2">

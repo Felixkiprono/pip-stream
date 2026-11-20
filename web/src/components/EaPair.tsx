@@ -18,6 +18,36 @@ export function usePairStatus(poll = true) {
   })
 }
 
+/** MetaTrader on a Mac runs inside Wine: its "Open Data Folder" opens a Windows-style window that won't take a drag from Finder. */
+export const isMac = typeof navigator !== 'undefined' && /Mac/i.test(navigator.userAgent) && !/iPhone|iPad/i.test(navigator.userAgent)
+
+export function macExpertsPath(mt: 4 | 5) {
+  return mt === 5
+    ? '~/Library/Application Support/net.metaquotes.wine.metatrader5/drive_c/Program Files/MetaTrader 5/MQL5/Experts'
+    : '~/Library/Application Support/net.metaquotes.wine.metatrader4/drive_c/Program Files (x86)/MetaTrader 4/MQL4/Experts'
+}
+
+/** Where to put the downloaded file, said the way that works on this computer. */
+export function InstallHint({ mt, source }: { mt: 4 | 5; source: boolean }) {
+  return isMac ? (
+    <>
+      <p className="text-sm text-ink-2">
+        On a Mac: open <b>Finder</b>, press <b>Cmd+Shift+G</b>, paste this folder, and drag the downloaded file into it:
+      </p>
+      <CopyRow value={macExpertsPath(mt)} />
+      <p className="text-sm text-ink-2">
+        Then in MetaTrader, right-click <b>Expert Advisors → Refresh</b> in the Navigator.
+        {source && <> If PipStream doesn't appear, click <b>IDE</b> in MetaTrader's toolbar, open <b>Experts → PipStream</b> and press <b>Compile</b>.</>}
+      </p>
+    </>
+  ) : (
+    <p className="text-sm text-ink-2">
+      In MetaTrader {mt}: <b>File → Open Data Folder → MQL{mt} → Experts</b>, drop the file in, then right-click <b>Expert Advisors → Refresh</b>.
+      {source && <> If PipStream doesn't appear, open the file in MetaEditor and press <b>Compile</b>.</>}
+    </p>
+  )
+}
+
 /** Seconds since mount, to show troubleshooting only after a fair wait. */
 export function useElapsed() {
   const [s, setS] = useState(0)
@@ -97,10 +127,7 @@ export function EaPair({ onPaired }: { onPaired: (b: Broker) => void }) {
           <a href={file} download className="inline-flex min-h-11 items-center gap-2 rounded-2xl bg-brand px-4 text-sm font-semibold text-brand-ink">
             <Download className="size-4" /> {file.split('/').pop()}
           </a>
-          <p className="mt-2 text-sm text-ink-2">
-            In MetaTrader {mt}: <b>File → Open Data Folder → MQL{mt} → Experts</b>, drop the file in, then right-click <b>Expert Advisors → Refresh</b>.
-            {file.includes('.mq') && <> If PipStream doesn't appear, open the file in MetaEditor and press <b>Compile</b>.</>}
-          </p>
+          <InstallHint mt={mt} source={file.includes('.mq')} />
           <p className="text-xs text-ink-3">Already set up for {eaUrl}. Nothing to type in the EA's settings.</p>
         </Li>
         <Li n={2} title="Allow PipStream once">

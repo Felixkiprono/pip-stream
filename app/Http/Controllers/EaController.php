@@ -64,7 +64,7 @@ class EaController extends Controller
         $url = self::eaUrl($r);
         $src = preg_replace('/input string PipStreamUrl = "[^"]*";/', 'input string PipStreamUrl = "'.addcslashes($url, '"\\').'";', $src, 1);
 
-        return response($src)->header('Content-Type', 'text/plain; charset=utf-8')
+        return response($src)->header('Content-Type', 'application/octet-stream')
             ->header('Content-Disposition', "attachment; filename=\"PipStream.{$ext}\"")
             ->header('Cache-Control', 'no-store');
     }

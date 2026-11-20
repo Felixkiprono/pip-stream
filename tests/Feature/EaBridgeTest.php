@@ -206,4 +206,16 @@ class EaBridgeTest extends TestCase
         preg_match('#(pst_[A-Za-z0-9]{40})#', $cmd, $m);
         $this->get("/ea/install/{$m[1]}.sh")->assertOk();
     }
+
+    public function test_terminal_prices_let_practice_accounts_fill_market_signals(): void
+    {
+        [, , $key] = $this->addEa();
+        $this->call('POST', '/ea/v1/sync', [], [], [], ['HTTP_X-PipStream-Key' => $key, 'CONTENT_TYPE' => 'application/json'],
+            json_encode(['state' => ['balance' => 1000, 'positions' => [], 'quotes' => ['EURUSDm' => [1.1191, 1.1193], 'XAUUSD' => [2440.1, 2440.5], 'BAD KEY' => [1, 2]]]]))->assertOk();
+        $p = config('pipstream.stream_prefix');
+        $this->assertSame('1.1192', $this->redis()->get("{$p}:quote:EURUSDm"));
+        $this->assertSame('1.1192', $this->redis()->get("{$p}:quote:EURUSD"));
+        $this->assertSame('2440.3', $this->redis()->get("{$p}:quote:XAUUSD"));
+        $this->assertFalse($this->redis()->get("{$p}:quote:BAD KEY"));
+    }
 }

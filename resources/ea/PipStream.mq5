@@ -11,7 +11,7 @@
 //+------------------------------------------------------------------+
 #property copyright "PipStream"
 #property link      "https://pip.stream"
-#property version   "1.11"
+#property version   "1.12"
 #property description "Places, updates and closes the trades from the Telegram channels you copy in PipStream."
 
 #include <Trade\Trade.mqh>
@@ -22,7 +22,7 @@ input string PipStreamUrl = PS_DEFAULT_URL;  // Server (add it under Tools > Opt
 input int    SlippagePoints = 30;                  // Max slippage for market orders, in points
 
 #define PS_MAGIC 770077
-#define PS_VERSION "1.11"
+#define PS_VERSION "1.12"
 #define PS_KEY_FILE "PipStream.key"
 #define PS_CODE_LABEL "PipStreamPairCode"
 
@@ -155,6 +155,26 @@ bool RetOk(const uint rc)
 //+------------------------------------------------------------------+
 //| account state and symbol specs                                   |
 //+------------------------------------------------------------------+
+// Live bid/ask for the Market Watch, so practice accounts can fill "buy now" signals at a real price.
+string QuotesJson()
+{
+   string s = "\"quotes\":{";
+   int n = SymbolsTotal(true);
+   bool first = true;
+   for(int i = 0; i < n && i < 60; i++)
+   {
+      string sym = SymbolName(i, true);
+      double bid = SymbolInfoDouble(sym, SYMBOL_BID);
+      double ask = SymbolInfoDouble(sym, SYMBOL_ASK);
+      if(bid <= 0 || ask <= 0)
+         continue;
+      int digits = (int)SymbolInfoInteger(sym, SYMBOL_DIGITS);
+      s += (first ? "" : ",") + "\"" + Esc(sym) + "\":[" + Num(bid, digits) + "," + Num(ask, digits) + "]";
+      first = false;
+   }
+   return(s + "}");
+}
+
 string StateJson()
 {
    bool allowed = (TerminalInfoInteger(TERMINAL_TRADE_ALLOWED) != 0) && (MQLInfoInteger(MQL_TRADE_ALLOWED) != 0);
@@ -187,7 +207,7 @@ string StateJson()
       s += (first ? "" : ",") + p;
       first = false;
    }
-   return(s + "]}");
+   return(s + "]," + QuotesJson() + "}");
 }
 
 string SpecsJson()

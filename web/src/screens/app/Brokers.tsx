@@ -6,6 +6,7 @@ import { useNavigate } from 'react-router'
 import { useSession } from '../../lib/session'
 import { Page } from '../../components/AppShell'
 import { BrokerTest } from '../../components/BrokerTest'
+import { RouteChannels } from '../../components/RouteChannels'
 import { EaPair } from '../../components/EaPair'
 import { EaSetup } from '../../components/EaSetup'
 import { Badge, Button, Card, ErrorNote, Spinner } from '../../components/ui'
@@ -84,8 +85,9 @@ export default function Brokers() {
                   </span>
                 )}
                 {testing === b.id && (
-                  <div className="w-full pl-13">
+                  <div className="w-full space-y-3 pl-13">
                     <BrokerTest broker={b} auto={justPaired === b.id} />
+                    {justPaired === b.id && b.status?.state === 'connected' && <RouteChannels broker={b} onDone={() => setJustPaired(null)} />}
                   </div>
                 )}
               </li>

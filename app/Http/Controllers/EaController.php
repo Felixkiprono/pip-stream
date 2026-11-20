@@ -201,6 +201,29 @@ class EaController extends Controller
         Cache::put("ea-pair:{$token}", ['key' => $key] + $pairing, now()->addMinutes(15));
     }
 
+    /**
+     * Live prices from a customer's terminal, for practice accounts to fill "buy now" signals at.
+     * Stored as the mid price under the broker's name (EURUSDm) and the plain one (EURUSD), for 2 minutes.
+     */
+    private function storeQuotes($redis, array $quotes): void
+    {
+        $p = config('pipstream.stream_prefix');
+        foreach (array_slice($quotes, 0, 60, true) as $sym => $q) {
+            if (! is_string($sym) || ! preg_match('/^[A-Za-z0-9._#-]{2,30}$/', $sym) || ! is_array($q) || count($q) < 2) {
+                continue;
+            }
+            [$bid, $ask] = [(float) $q[0], (float) $q[1]];
+            if ($bid <= 0 || $ask < $bid) {
+                continue;
+            }
+            $mid = (string) round(($bid + $ask) / 2, 6);
+            $redis->set("{$p}:quote:{$sym}", $mid, ['ex' => 120]);
+            if (preg_match('/^([A-Z0-9]{3,})[^A-Z0-9]/', $sym.'|', $m) && $m[1] !== $sym) {
+                $redis->set("{$p}:quote:{$m[1]}", $mid, ['ex' => 120]);
+            }
+        }
+    }
+
     public function sync(Request $r)
     {
         $b = $this->account($r);
@@ -227,6 +250,8 @@ class EaController extends Controller
             ]), ['ex' => 3600]);
         }
         if (is_array($state = $r->input('state'))) {
+            $this->storeQuotes($redis, (array) ($state['quotes'] ?? []));
+            unset($state['quotes']);
             $state['at'] = $now;
             $state['positions'] = array_slice((array) ($state['positions'] ?? []), 0, 300);
             $redis->set($this->k($b->id, 'state'), json_encode($state), ['ex' => 86400]);

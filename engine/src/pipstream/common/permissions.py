@@ -64,7 +64,7 @@ SERVICES: dict[str, ServicePerms] = {
         publish=frozenset({T.CONFIG_CHANGED, T.BILLING_CHANGED, T.TG_LOGIN_REQUEST}),
         consume=frozenset({T.TRADE_EXECUTED, T.TRADE_FAILED, T.TRADE_CLOSED, T.RISK_LIMIT_HIT,
                            T.SIGNAL_REJECTED, T.TG_LOGIN_STATUS}),
-        rw_keys=("ps:killswitch:*", "ps:eares:*"),
+        rw_keys=("ps:killswitch:*", "ps:eares:*", "ps:quote:*"),
         ro_keys=("ps:health:*", "ps:acct:*", "ps:lease:*"),
         # EA bridge: hands queued commands to the EA (read only) and stores its answers (ps:eares:*)
         extra=("(+@all -@admin -@dangerous ~laravel:*)", "(+xrevrange %R~ps:acct:*:ea:cmd)"),

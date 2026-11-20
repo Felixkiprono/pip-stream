@@ -101,3 +101,33 @@ async def test_broadcast_reaches_every_replica(acl_redis):
     a.stop(); b.stop()
     await asyncio.gather(ta, tb)
     assert got == {"a": 1, "b": 1}
+
+
+async def test_slow_handler_is_not_reclaimed_while_running(acl_redis):
+    """A handler slower than claim_idle_ms must run once, not be claimed back mid-run
+    (this sent a second Telegram login code that voided the first)."""
+    import asyncio
+
+    from redis.asyncio import Redis
+
+    from pipstream.common.bus import Bus
+    from pipstream.common.events import Topic, TgLoginStatus
+
+    pub = Bus(Redis.from_url(acl_redis["url"]("intake"), decode_responses=True), "intake", prefix="ps")
+    sub_r = Redis.from_url(acl_redis["url"]("laravel"), decode_responses=True)
+    sub = Bus(sub_r, "laravel", prefix="ps")
+    calls = []
+
+    async def slow(ev):
+        calls.append(ev.event_id)
+        await asyncio.sleep(1.5)
+
+    task = asyncio.create_task(sub.subscribe([Topic.TG_LOGIN_STATUS], slow, consumer="c1", claim_idle_ms=300,
+                                             block_ms=100))
+    await asyncio.sleep(0.3)
+    await pub.publish(Topic.TG_LOGIN_STATUS, TgLoginStatus(request_id="r", telegram_account_id="a", user_id="u",
+                                                           status="code_sent"))
+    await asyncio.sleep(2.5)
+    sub.stop()
+    await asyncio.wait_for(task, 5)
+    assert len(calls) == 1

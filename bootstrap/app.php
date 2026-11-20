@@ -22,7 +22,7 @@ return Application::configure(basePath: dirname(__DIR__))
         // Traefik (NanoDeploi) -> nginx -> php-fpm: trust the proxy chain for scheme and host
         $middleware->trustProxies(at: '*');
         $middleware->preventRequestForgery(except: ['webhooks/*']);
-        $middleware->alias(['admin' => \App\Http\Middleware\EnsureAdmin::class]);
+        $middleware->alias(['admin' => \App\Http\Middleware\EnsureAdmin::class, 'active' => \App\Http\Middleware\EnsureActive::class]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(

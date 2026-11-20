@@ -70,18 +70,18 @@ export default function Channels() {
     <Step
       step={fromApp ? undefined : 3}
       back={fromApp ? '/app/channels' : false}
-      title="Which channels should we copy?"
-      subtitle="These are the channels on your Telegram. Pick the ones that post trading signals."
+      title="Which chats should we copy?"
+      subtitle="These are the channels and groups on your Telegram. Pick the ones that post trading signals."
       action={
         <Button block busy={busy} disabled={!fresh.length && !already} onClick={() => (fresh.length ? follow() : nav(fromApp ? '/app/channels' : '/start/broker'))}>
-          {fresh.length ? `Copy ${fresh.length} channel${fresh.length > 1 ? 's' : ''}` : already ? 'Continue' : 'Pick at least one'}
+          {fresh.length ? `Copy ${fresh.length} chat${fresh.length > 1 ? 's' : ''}` : already ? 'Continue' : 'Pick at least one'}
         </Button>
       }
     >
       <div className="sticky top-0 z-10 -mx-5 bg-bg px-5 pb-2">
         <label className="flex h-12 items-center gap-2 rounded-2xl border border-line bg-surface px-4 focus-within:border-brand">
           <Search className="size-5 text-ink-3" />
-          <input className="min-w-0 flex-1 bg-transparent text-[16px] outline-none" placeholder="Search your channels" value={q} onChange={(e) => setQ(e.target.value)} />
+          <input className="min-w-0 flex-1 bg-transparent text-[16px] outline-none" placeholder="Search channels and groups" value={q} onChange={(e) => setQ(e.target.value)} />
           <button aria-label="Refresh list from Telegram" onClick={reload} className="text-ink-3">
             <RefreshCw className={clsx('size-5', list.isFetching && 'animate-spin')} />
           </button>
@@ -89,10 +89,10 @@ export default function Channels() {
       </div>
       <ErrorNote>{err || (list.error as Error | null)?.message}</ErrorNote>
       {list.isLoading ? (
-        <Spinner label="Reading your Telegram channels…" />
+        <Spinner label="Reading your Telegram channels and groups…" />
       ) : !channels.length ? (
         <p className="rounded-3xl bg-surface-2 p-5 text-center text-ink-2">
-          No channels yet. Join your signal channel in Telegram, then tap refresh.
+          No channels or groups yet. Join your signal channel or group in Telegram, then tap refresh.
         </p>
       ) : (
         <ul className="-mx-1 space-y-1.5">
@@ -112,6 +112,7 @@ export default function Channels() {
                   <span className="min-w-0 flex-1">
                     <span className="block truncate font-semibold">{c.title}</span>
                     <span className="flex items-center gap-2 text-sm text-ink-3">
+                      <Badge>{c.kind === 'group' ? 'Group' : 'Channel'}</Badge>
                       {c.username && <span className="truncate">@{c.username}</span>}
                       {!!c.followers && (
                         <Badge tone="brand">

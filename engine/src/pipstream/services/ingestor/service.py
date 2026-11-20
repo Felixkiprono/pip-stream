@@ -71,6 +71,11 @@ class IngestorService:
         if not s.intake_private_key:
             self.c.log.error("PS_INTAKE_PRIVATE_KEY is not set; cannot open Telegram sessions")
             return
+        if not s.ingestor_fake_telegram and not (s.telegram_api_id and s.telegram_api_hash):
+            if not getattr(self, "_warned_api", False):
+                self.c.log.error("PS_TELEGRAM_API_ID / PS_TELEGRAM_API_HASH are not set; not reading Telegram")
+                self._warned_api = True
+            return
         opener = Opener(s.intake_private_key)
         rows = await self.c.db.fetch("select id, session_ciphertext from telegram_accounts "
                                      "where status = 'active' and session_ciphertext is not null")
@@ -84,9 +89,13 @@ class IngestorService:
             lease = Lease(self.c.redis, f"{self.p}:lease:tg:{acc_id}", self.c.consumer, s.ingestor_lease_ttl_ms)
             if not await lease.acquire():
                 continue  # someone else holds it; we'll retry next tick
-            from .sources.telethon_source import TelethonSource
-            src = TelethonSource(acc_id, opener.open(r["session_ciphertext"]), s.telegram_api_id,
-                                 s.telegram_api_hash)
+            if s.ingestor_fake_telegram:  # dev stand-in: posts come from `pipstream fake-post`
+                from ...devtools.fake_telegram import FakeTelegramSource
+                src = FakeTelegramSource(acc_id, self.c.redis, self.p)
+            else:
+                from .sources.telethon_source import TelethonSource
+                src = TelethonSource(acc_id, opener.open(r["session_ciphertext"]), s.telegram_api_id,
+                                     s.telegram_api_hash)
             try:
                 await src.start(self.on_post)
             except Exception:

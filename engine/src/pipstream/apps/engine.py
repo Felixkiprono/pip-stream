@@ -34,7 +34,7 @@ ORDER = ("executor", "risk", "intake")
 # not in SHARED is dropped for every child.
 OWN: dict[str, tuple[str, ...]] = {
     "intake": ("PS_INTAKE_PRIVATE_KEY", "PS_TELEGRAM_API_ID", "PS_TELEGRAM_API_HASH", "PS_INGESTOR_"),
-    "risk": ("PS_INTENT_SIGNING_KEY",),
+    "risk": ("PS_INTENT_SIGNING_KEY", "PS_RISK_"),
     "executor": ("PS_INTENT_VERIFY_KEY", "PS_EXECUTOR_PRIVATE_KEY", "PS_MT5_", "PS_DERIV_", "PS_ROUTER_"),
 }
 SHARED = ("PS_DATABASE_URL", "PS_ENV", "PS_LOG_LEVEL", "PS_STREAM_PREFIX", "PS_STREAM_MAXLEN",

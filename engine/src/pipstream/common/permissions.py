@@ -37,6 +37,8 @@ SERVICES: dict[str, ServicePerms] = {
         consume=frozenset({T.TG_MESSAGE_NEW, T.TG_MESSAGE_EDITED, T.TG_LOGIN_REQUEST}),
         broadcast=frozenset({T.CONFIG_CHANGED}),
         rw_keys=("ps:dedupe:*", "ps:lease:*", "ps:editver:*"),
+        # login requests carry the phone, code and 2FA password: intake deletes each once handled
+        extra=("(+xdel ~ps:stream:tg.login.request)",),
     ),
     # risk = copy rules, sizing, limits; the ONLY writer of trade.intent (holds signing key)
     "risk": ServicePerms(
@@ -88,7 +90,7 @@ def acl_line(service: str, password: str, prefix: str = "ps") -> str:
         parts.append(f"({_BROADCAST_CMDS} {keys})")
     pub = sorted(p.publish) + ["dlq"]
     parts.append("(+xadd " + " ".join(f"~{stream_key(prefix, t)}" for t in pub) + ")")
-    own = [f"~{prefix}:health:{service}", f"~{prefix}:deliveries:{service}", *[f"~{k}" for k in p.rw_keys]]
+    own = [f"~{prefix}:health:{service}", f"~{prefix}:health:{service}:*", f"~{prefix}:deliveries:{service}", *[f"~{k}" for k in p.rw_keys]]
     own += [f"%R~{k}" for k in p.ro_keys]
     parts.append(f"({_KV_CMDS} {' '.join(own)})")
     parts.extend(p.extra)

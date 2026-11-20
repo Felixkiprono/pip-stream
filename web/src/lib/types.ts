@@ -4,10 +4,25 @@ export type Onboarding = {
   real_broker: boolean
   channels: number
 }
-export type User = { id: string; name: string | null; email: string; role: 'admin' | 'customer'; onboarding: Onboarding }
+export type PlanInfo = {
+  id: string | null; name: string; status: string | null; tier: 'free' | 'premium'; lifetime: boolean
+  until: string | null; days_left: number | null
+  limits: { brokers: number; live: boolean }
+  usage: { brokers: number; channels: number }
+}
+export type User = { id: string; name: string | null; email: string; role: 'admin' | 'customer'; onboarding: Onboarding; plan?: PlanInfo; beta?: boolean }
+export type Stats = {
+  days: number
+  series: { day: string; signals: number; ignored: number; opened: number; pnl: number }[]
+  totals: { trades: number; open: number; closed: number; wins: number; losses: number; pnl: number; best: number | null; worst: number | null; win_rate: number | null; latency_ms: number | null }
+  channels: { id: string; title: string; signals: number; ignored: number; trades: number; pnl: number }[]
+  symbols: { symbol: string; trades: number; pnl: number }[]
+  curve: { t: string; v: number }[]
+}
 
 export type TgStatus = {
-  status: 'pending' | 'code_sent' | 'password_needed' | 'linked' | 'channels' | 'logged_out' | 'error'
+  status: 'pending' | 'code_sent' | 'password_needed' | 'linked' | 'channels' | 'logged_out' | 'test_ok' | 'qr' | 'error'
+  info?: { stand_in?: boolean; code?: string; via?: string | null; length?: number | null; email?: string | null; next?: string | null; timeout?: number | null; qr?: string; url?: string; expires?: number | null } | null
   request_id?: string
   phone_hint?: string
   error?: string
@@ -17,6 +32,7 @@ export type TgChannel = {
   tg_chat_id: number
   title: string
   username?: string | null
+  kind?: 'channel' | 'group'
   followed?: boolean
   channel_id?: string | null
   followers?: number

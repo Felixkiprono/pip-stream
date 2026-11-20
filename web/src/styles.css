@@ -1,6 +1,6 @@
 @import "tailwindcss";
 
-/* PipStream design tokens. Light and dark follow the phone's setting. */
+/* PipStream design tokens. Light by default; dark below (device setting or the in-app toggle). */
 :root {
   --bg: #f6f7fb;
   --surface: #ffffff;
@@ -21,8 +21,10 @@
   --tg: #2aabee;
   --shadow: 0 1px 2px rgb(13 20 36 / 0.06), 0 8px 24px rgb(13 20 36 / 0.06);
 }
-@media (prefers-color-scheme: dark) {
-  :root {
+/* Theme: follows the device unless the person picked one (html[data-theme], set by the toggle). */
+:root { color-scheme: light; }
+:root[data-theme="dark"] {
+  color-scheme: dark;
     --bg: #0b1220;
     --surface: #121a2b;
     --surface-2: #1a2438;
@@ -41,6 +43,27 @@
     --warn-soft: #3a2b12;
     --shadow: 0 1px 2px rgb(0 0 0 / 0.3), 0 8px 24px rgb(0 0 0 / 0.25);
   }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+      --bg: #0b1220;
+      --surface: #121a2b;
+      --surface-2: #1a2438;
+      --line: #243049;
+      --ink: #eef2fa;
+      --ink-2: #aab3c7;
+      --ink-3: #6f7a92;
+      --brand: #4d8dff;
+      --brand-ink: #ffffff;
+      --brand-soft: #18284a;
+      --up: #2fd296;
+      --up-soft: #10322a;
+      --down: #ff6b74;
+      --down-soft: #3a1a20;
+      --warn: #f2b14a;
+      --warn-soft: #3a2b12;
+      --shadow: 0 1px 2px rgb(0 0 0 / 0.3), 0 8px 24px rgb(0 0 0 / 0.25);
+    }
 }
 
 @theme inline {

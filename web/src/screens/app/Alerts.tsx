@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import clsx from 'clsx'
-import { CircleAlert, CircleCheck, CircleSlash, Info } from 'lucide-react'
+import { ChevronRight, CircleAlert, CircleCheck, CircleSlash, Info } from 'lucide-react'
+import { Link } from 'react-router'
 import { useEffect } from 'react'
 import { Page } from '../../components/AppShell'
 import { Card, Spinner } from '../../components/ui'
@@ -33,7 +34,8 @@ export default function Alerts() {
             {q.data.alerts.map((a) => {
               const [Icon, tone] = ICON[a.kind] ?? [Info, 'text-ink-2 bg-surface-2']
               return (
-                <li key={a.id} className="flex gap-3 py-3">
+                <li key={a.id}>
+                  <Link to={`/app/alerts/${a.id}`} className="-mx-2 flex items-center gap-3 rounded-2xl px-2 py-3 hover:bg-surface-2 active:bg-surface-2">
                   <span className={clsx('grid size-10 shrink-0 place-items-center rounded-2xl', tone)}>
                     <Icon className="size-5" />
                   </span>
@@ -44,6 +46,8 @@ export default function Alerts() {
                     </span>
                     <span className="block text-sm text-ink-2 tabular">{a.body}</span>
                   </span>
+                  <ChevronRight className="size-5 shrink-0 text-ink-3" />
+                  </Link>
                 </li>
               )
             })}

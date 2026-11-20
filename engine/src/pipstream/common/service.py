@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import json
 import logging
 import signal
 import socket
@@ -30,6 +31,9 @@ class Context:
     log: logging.Logger
     stop: asyncio.Event = field(default_factory=asyncio.Event)
     consumer: str = field(default_factory=lambda: f"{socket.gethostname()}")
+    # Optional: what this worker reports on the admin System page (booleans and counts,
+    # never secret values). Written next to the heartbeat as <health_key>:status.
+    status: Callable[[], dict] | None = None
 
     def health_key(self) -> str:
         return f"{self.settings.stream_prefix}:health:{self.name}"
@@ -47,6 +51,9 @@ async def heartbeat(c: Context, every_s: float = 5.0) -> None:
     while not c.stop.is_set():
         with contextlib.suppress(Exception):
             await c.redis.set(c.health_key(), str(time.time()), ex=30)
+        if c.status is not None:
+            with contextlib.suppress(Exception):
+                await c.redis.set(f"{c.health_key()}:status", json.dumps(c.status(), default=str), ex=30)
         with contextlib.suppress(asyncio.TimeoutError):
             await asyncio.wait_for(c.stop.wait(), every_s)
 

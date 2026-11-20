@@ -46,6 +46,11 @@ class Settings(BaseModel):
     ingestor_confirm_to_saved: bool = False  # post "PipStream read ..." to the reader's Saved Messages
     ingestor_fake_telegram: bool = False  # dev only: web logins accept code 12345 (11111 -> 2FA "demo")
 
+    # Risk: PS_RISK_CHECKS=false skips the business checks (plan/subscription, live allowed,
+    # channel filters, entry slippage, require SL, max open trades, daily loss) so every
+    # parsed signal becomes a trade. Kill switches and position sizing still apply. Beta/testing.
+    risk_checks: bool = True
+
     # Router
     router_global_max_lot: float = 5.0
     router_snapshot_interval_s: float = 30.0

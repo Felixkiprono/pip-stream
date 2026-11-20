@@ -54,6 +54,10 @@ class RiskEngine:
         self.signer = IntentSigner(s.intent_signing_key, s.intent_key_id, s.intent_ttl_ms)
         self.catalog = SymbolCatalog.load(s.symbols_file)
         self.p = s.stream_prefix
+        self.checks = s.risk_checks
+        if not self.checks:
+            c.log.warning("risk checks are OFF (PS_RISK_CHECKS=false): every parsed signal is traded; "
+                          "kill switches and sizing still apply")
 
     # ------------------------------------------------------------------ entry
     async def handle(self, ev: Event) -> None:
@@ -102,12 +106,13 @@ class RiskEngine:
     async def plan(self, sig: ParsedSignal, rule: dict) -> list[TradeIntent]:
         if rule["user_kill"] or await self.c.redis.get(f"{self.p}:killswitch:user:{rule['user_id']}") == "1":
             raise Skip("kill_switch", "user kill switch on")
-        if rule["billing_status"] not in ("trialing", "active"):
-            raise Skip("no_subscription", str(rule["billing_status"]))
-        if rule["mode"] == "live" and not rule["allow_live"]:
-            raise Skip("plan_no_live", "plan allows paper only")
-        if reason := check_filters(sig, rule["filters"] or {}):
-            raise Skip(reason)
+        if self.checks:
+            if rule["billing_status"] not in ("trialing", "active"):
+                raise Skip("no_subscription", str(rule["billing_status"]))
+            if rule["mode"] == "live" and not rule["allow_live"]:
+                raise Skip("plan_no_live", "plan allows paper only")
+            if reason := check_filters(sig, rule["filters"] or {}):
+                raise Skip(reason)
         if sig.kind in ("modify", "close"):
             return await self._followup(sig, rule)
         if sig.source.edit_version > 0:
@@ -157,7 +162,7 @@ class RiskEngine:
             raise Skip("symbol_unavailable", f"no spec for {broker_sym}")
         q = await self.c.redis.get(f"{self.p}:quote:{broker_sym}")
         quote = float(q) if q else None
-        if reason := entry_passed(sig, quote, limits.get("max_entry_slippage_points"), spec.point):
+        if self.checks and (reason := entry_passed(sig, quote, limits.get("max_entry_slippage_points"), spec.point)):
             raise Skip(reason)
 
         ref = (sig.entry.reference_price() if sig.entry else None) or quote
@@ -168,15 +173,15 @@ class RiskEngine:
             sl = round(ref - sign * sig.sl_pips * pip, 6)
         if not tps and sig.tp_pips and ref is not None:
             tps = [round(ref + sign * t * pip, 6) for t in sig.tp_pips]
-        if limits.get("require_sl", True) and sl is None:
+        if self.checks and limits.get("require_sl", True) and sl is None:
             raise Skip("missing_sl", "rule requires a stop loss")
 
-        if (mx := limits.get("max_open_trades")) is not None:
+        if self.checks and (mx := limits.get("max_open_trades")) is not None:
             n = await self.c.db.fetchval("select count(*) from positions where broker_account_id=$1 and status='open'",
                                          rule["broker_account_id"])
             if n >= int(mx):
                 raise Skip("max_open_trades", f"{n} open")
-        if (mdl := limits.get("max_daily_loss")) is not None:
+        if self.checks and (mdl := limits.get("max_daily_loss")) is not None:
             pnl = await self.c.db.fetchval(
                 "select coalesce(sum(profit),0) from positions where broker_account_id=$1 and status='closed' "
                 "and closed_at >= date_trunc('day', now())", rule["broker_account_id"])
@@ -189,12 +194,15 @@ class RiskEngine:
         elif mode == "multiplier":
             vol = float(rule["fixed_lots"] or spec.volume_min) * float(rule["multiplier"] or 1)
         elif mode == "risk_pct":
-            if sl is None or ref is None:
+            if (sl is None or ref is None) and not self.checks:
+                vol = float(spec.volume_min)  # checks off: no SL/price to size from, trade the minimum
+            elif sl is None or ref is None:
                 raise Skip("sizing", "risk sizing needs entry/market price and SL")
-            try:
-                vol = risk_lots(info.balance, float(rule["risk_pct"]), ref, sl, spec)
-            except SizingError as e:
-                raise Skip("sizing", str(e)) from e
+            else:
+                try:
+                    vol = risk_lots(info.balance, float(rule["risk_pct"]), ref, sl, spec)
+                except SizingError as e:
+                    raise Skip("sizing", str(e)) from e
         else:
             raise Skip("sizing", f"sizing mode {mode} not valid for CFD signals")
         try:

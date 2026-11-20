@@ -22,6 +22,11 @@ def parse(text, reply=None, profile=None):
     ("BTCUSD long 64,250 sl 63,500 tp 66,000", "BTCUSD", "buy", ("market", 64250), 63500, [66000]),
     ("EURUSD BUY LIMIT 1.0850 SL 30 pips TP 60 pips", "EURUSD", "buy", ("limit", 1.085), 1.082, [1.091]),
     ("USDJPY BUY 151.20 SL 25 TP 40", "USDJPY", "buy", ("market", 151.2), 150.95, [151.6]),
+    # numbered targets with arrows / dashes: the 1, 2, 3 are indexes, not prices (real channel post)
+    ("#XAUUSD\nDirection: SELL 📉\nEntry: 2440.00\nSL - 2450.00\nTP 1 ➜ 2430.00\nTP 2 ➜ 2420.00\nTP 3 ➜ 2405.00",
+     "XAUUSD", "sell", ("market", 2440), 2450, [2430, 2420, 2405]),
+    ("GOLD BUY 2350 SL 2340 TP 1 - 2360 TP 2 - 2370", "XAUUSD", "buy", ("market", 2350), 2340, [2360, 2370]),
+    ("GOLD BUY 2350 SL 2340 TP 1 → 2360\nTP 2 → 2370", "XAUUSD", "buy", ("market", 2350), 2340, [2360, 2370]),
 ])
 def test_open_signals(text, symbol, side, entry, sl, tps):
     r = parse(text)

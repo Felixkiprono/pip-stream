@@ -14,6 +14,10 @@
     <link rel="icon" href="/icons/icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
     <title>PipStream</title>
+      <script>
+      // apply the saved theme before first paint (no flash); "system" follows the device
+      try { var t = localStorage.getItem('ps.theme'); if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t } catch (e) {}
+    </script>
   </head>
   <body>
     <div id="root"></div>

@@ -25,9 +25,15 @@ class ConsumeEvents extends Command
         $consumer = gethostname() ?: 'laravel';
         $once = (bool) $this->option('once');
         $rounds = 0;
+        $beat = 0.0;
         $this->info("consuming as {$consumer}");
         $bus->consume(Bus::CONSUME, $handler, $consumer,
-            function () use ($once, &$rounds) {
+            function () use ($once, &$rounds, &$beat) {
+                if (microtime(true) - $beat > 5) { // liveness for the admin System page
+                    $beat = microtime(true);
+                    \Illuminate\Support\Facades\Cache::put('pipstream:consumer:beat', $beat, 60);
+                }
+
                 return $this->stop || ($once && $rounds++ >= 1);
             }, blockMs: $once ? 200 : 2000);
 

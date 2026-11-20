@@ -18,11 +18,18 @@ class AuthController extends Controller
         }
 
         return ['id' => $u->id, 'name' => $u->name, 'email' => $u->email, 'role' => $u->role,
-            'onboarding' => $accounts->onboarding($u)];
+            'onboarding' => $accounts->onboarding($u), 'plan' => $accounts->plan($u), 'beta' => config('pipstream.beta')];
     }
 
     public function me(Request $r, Accounts $accounts)
     {
+        if ($r->user() && $r->user()->status === 'suspended') { // suspended: sign out
+            Auth::guard('web')->logout();
+            $r->session()->invalidate();
+
+            return ['user' => null];
+        }
+
         return ['user' => self::present($r->user(), $accounts)];
     }
 

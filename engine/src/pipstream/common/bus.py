@@ -70,7 +70,9 @@ class Bus:
 
     async def subscribe(self, topics: Iterable[Topic], handler: Handler, *, group: str | None = None,
                         consumer: str = "c1", concurrency: int = 16, block_ms: int = 1000,
-                        claim_idle_ms: int = 5000, max_deliveries: int = 5) -> None:
+                        claim_idle_ms: int = 5000, max_deliveries: int = 5, delete_after: bool = False) -> None:
+        """delete_after: XDEL each entry once handled and never copy its body to the DLQ (for
+        events that carry secrets, e.g. tg.login.request with a login code or 2FA password)."""
         group = group or self.service
         keys = [self.key(t) for t in topics]
         for k in keys:
@@ -86,8 +88,10 @@ class Bus:
                     ev = Event.model_validate_json(raw)
                 except Exception:
                     log.error("undecodable event dead-lettered", extra=ctx(stream=key, id=msg_id))
-                    await self._dead_letter(key, msg_id, raw, "decode_error")
+                    await self._dead_letter(key, msg_id, '{"redacted": true}' if delete_after else raw, "decode_error")
                     await self.redis.xack(key, group, msg_id)
+                    if delete_after:
+                        await self.redis.xdel(key, msg_id)
                     return
                 try:
                     await handler(ev)
@@ -96,16 +100,29 @@ class Bus:
                     log.exception("handler failed", extra=ctx(topic=ev.topic, trace_id=ev.trace_id,
                                                               attempt=n, event_id=ev.event_id))
                     if n >= max_deliveries:
-                        await self._dead_letter(key, msg_id, raw, repr(exc))
+                        await self._dead_letter(key, msg_id, '{"redacted": true}' if delete_after else raw, repr(exc))
                         await self.redis.xack(key, group, msg_id)
                         await self.redis.hdel(deliveries_key, f"{key}|{msg_id}")
+                        if delete_after:
+                            await self.redis.xdel(key, msg_id)
                     return
                 await self.redis.xack(key, group, msg_id)
+                if delete_after:
+                    await self.redis.xdel(key, msg_id)
+
+        # Entries this subscriber is handling or has queued. XAUTOCLAIM only looks at idle time,
+        # so without this a handler slower than claim_idle_ms (e.g. a Telegram call that takes
+        # 7 s) would be claimed back and run a second time while the first run is still going.
+        inflight: set[tuple[str, str]] = set()
 
         def spawn(key, msg_id, fields):
-            t = asyncio.create_task(process(_s(key), _s(msg_id), fields))
+            ident = (_s(key), _s(msg_id))
+            if ident in inflight:
+                return
+            inflight.add(ident)
+            t = asyncio.create_task(process(*ident, fields))
             tasks.add(t)
-            t.add_done_callback(tasks.discard)
+            t.add_done_callback(lambda _t: (tasks.discard(_t), inflight.discard(ident)))
 
         last_claim = 0.0
         loop = asyncio.get_running_loop()

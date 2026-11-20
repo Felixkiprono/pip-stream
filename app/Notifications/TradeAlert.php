@@ -34,7 +34,10 @@ class TradeAlert extends Notification implements ShouldQueue
     public function toArray(object $notifiable): array
     {
         return ['kind' => $this->kind, 'title' => $this->title, 'body' => $this->body,
-            'symbol' => $this->data['symbol'] ?? null, 'ticket' => $this->data['ticket'] ?? null];
+            'symbol' => $this->data['symbol'] ?? null, 'ticket' => $this->data['ticket'] ?? null,
+            // so the alert opens the full story (post → signal → orders → positions)
+            'signal_id' => $this->data['signal_id'] ?? null, 'intent_id' => $this->data['intent_id'] ?? null,
+            'broker_account_id' => $this->data['broker_account_id'] ?? null, 'trace_id' => $this->data['trace_id'] ?? null];
     }
 
     public function toTelegram(object $notifiable): string

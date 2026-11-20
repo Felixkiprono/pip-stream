@@ -12,7 +12,7 @@ import Channels from './screens/onboarding/Channels'
 import Done from './screens/onboarding/Done'
 import Plan from './screens/onboarding/Plan'
 import Style from './screens/onboarding/Style'
-import { TgCode, TgLinked, TgPassword, TgPhone } from './screens/onboarding/Telegram'
+import { TgCode, TgLinked, TgPassword, TgPhone, TgQr } from './screens/onboarding/Telegram'
 import Welcome from './screens/onboarding/Welcome'
 import Landing from './screens/Landing'
 import AlertsScreen from './screens/app/Alerts'
@@ -22,16 +22,19 @@ import ChannelsScreen from './screens/app/Channels'
 import HomeScreen from './screens/app/Home'
 import SettingsScreen from './screens/app/Settings'
 import TradesScreen from './screens/app/Trades'
+import DetailScreen from './screens/app/Detail'
 
 // The admin console is only for staff: keep it out of the customer download.
 const Admin = {
   Layout: lazy(() => import('./screens/admin/Admin').then((m) => ({ default: m.AdminLayout }))),
-  Overview: lazy(() => import('./screens/admin/Admin').then((m) => ({ default: m.AdminOverview }))),
+  Overview: lazy(() => import('./screens/admin/Overview')),
   Channels: lazy(() => import('./screens/admin/Admin').then((m) => ({ default: m.AdminChannels }))),
   Parser: lazy(() => import('./screens/admin/Admin').then((m) => ({ default: m.AdminParser }))),
   Review: lazy(() => import('./screens/admin/Admin').then((m) => ({ default: m.AdminReview }))),
   Users: lazy(() => import('./screens/admin/Admin').then((m) => ({ default: m.AdminUsers }))),
   Audit: lazy(() => import('./screens/admin/Admin').then((m) => ({ default: m.AdminAudit }))),
+  User: lazy(() => import('./screens/admin/Admin').then((m) => ({ default: m.AdminUser }))),
+  System: lazy(() => import('./screens/admin/Admin').then((m) => ({ default: m.AdminSystem }))),
 }
 
 function RequireUser({ admin, children }: { admin?: boolean; children: ReactNode }) {
@@ -60,6 +63,7 @@ export default function App() {
         <Route path="/start/telegram" element={<RequireUser><TgPhone /></RequireUser>} />
         <Route path="/start/code" element={<RequireUser><TgCode /></RequireUser>} />
         <Route path="/start/password" element={<RequireUser><TgPassword /></RequireUser>} />
+        <Route path="/start/qr" element={<RequireUser><TgQr /></RequireUser>} />
         <Route path="/start/linked" element={<RequireUser><TgLinked /></RequireUser>} />
         <Route path="/start/channels" element={<RequireUser><Channels /></RequireUser>} />
         <Route path="/start/broker" element={<RequireUser><Broker /></RequireUser>} />
@@ -72,6 +76,9 @@ export default function App() {
           <Route path="trades" element={<TradesScreen />} />
           <Route path="channels" element={<ChannelsScreen />} />
           <Route path="alerts" element={<AlertsScreen />} />
+          <Route path="alerts/:id" element={<DetailScreen kind="alerts" />} />
+          <Route path="trades/:id" element={<DetailScreen kind="trades" />} />
+          <Route path="signals/:id" element={<DetailScreen kind="signals" />} />
           <Route path="settings" element={<SettingsScreen />} />
           <Route path="billing" element={<BillingScreen />} />
           <Route path="brokers" element={<BrokersScreen />} />
@@ -83,7 +90,9 @@ export default function App() {
           <Route path="parser" element={<Admin.Parser />} />
           <Route path="review" element={<Admin.Review />} />
           <Route path="users" element={<Admin.Users />} />
+          <Route path="users/:id" element={<Admin.User />} />
           <Route path="audit" element={<Admin.Audit />} />
+          <Route path="system" element={<Admin.System />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

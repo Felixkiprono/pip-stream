@@ -32,9 +32,11 @@ class FakeSession:
 
 
 class FakeDialog:
-    def __init__(self, i, name):
-        self.id, self.name, self.is_channel = i, name, True
-        self.entity = type("E", (), {"username": name.lower()})()
+    def __init__(self, i, name, kind="channel"):
+        self.id, self.name = i, name
+        self.is_channel = kind in ("channel", "supergroup")
+        self.is_group = kind in ("supergroup", "group")
+        self.entity = type("E", (), {"username": name.lower().replace(" ", ""), "broadcast": kind == "channel"})()
 
 
 class FakeClient:
@@ -63,7 +65,8 @@ class FakeClient:
         self.signed_in = True
 
     async def iter_dialogs(self):
-        for d in (FakeDialog(-1001, "Gold Room"), FakeDialog(-1002, "FX Desk")):
+        for d in (FakeDialog(-1001, "Gold Room"), FakeDialog(-1002, "FX Desk"), FakeDialog(-1003, "VIP Chat", "supergroup"),
+                  FakeDialog(-44, "Study Group", "group"), FakeDialog(77, "A friend", "user")):
             yield d
 
     async def log_out(self):
@@ -144,7 +147,8 @@ async def test_web_login_with_2fa_stores_sealed_session(intake):
     assert env["linked"] == ["tga_1"]                                         # ingestor told to start reading
 
     chans = await _ask(env, "list_channels")
-    assert [c["title"] for c in chans["channels"]] == ["Gold Room", "FX Desk"]
+    assert [(c["title"], c["kind"]) for c in chans["channels"]] == [   # channels and groups, never private chats
+        ("Gold Room", "channel"), ("FX Desk", "channel"), ("VIP Chat", "group"), ("Study Group", "group")]
     assert FakeClient.created[-1].session_in == "STRING-SESSION-SECRET"      # opened only in intake
 
     out = await _ask(env, "logout")

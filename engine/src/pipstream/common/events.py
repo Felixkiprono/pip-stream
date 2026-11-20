@@ -252,7 +252,7 @@ class TgLoginRequest(BaseModel):
     request_id: str
     telegram_account_id: str
     user_id: str
-    step: Literal["send_code", "sign_in", "password", "list_channels", "logout"]
+    step: Literal["send_code", "sign_in", "password", "list_channels", "logout", "test", "resend", "qr"]
     phone: str | None = None
     code: str | None = None
     password: str | None = None
@@ -262,9 +262,10 @@ class TgLoginStatus(BaseModel):
     request_id: str
     telegram_account_id: str
     user_id: str
-    status: Literal["code_sent", "password_needed", "linked", "channels", "logged_out", "error"]
+    status: Literal["code_sent", "password_needed", "linked", "channels", "logged_out", "test_ok", "qr", "error"]
     phone_hint: str | None = None
     channels: list[dict] = Field(default_factory=list)  # [{tg_chat_id, title, username}]
+    info: dict | None = None  # code_sent: delivery; qr: {qr, url, expires}; test_ok: {name, username, live}
     error: str | None = None
 
 

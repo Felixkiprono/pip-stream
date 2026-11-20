@@ -26,6 +26,13 @@ return [
     'paystack_secret' => env('PAYSTACK_SECRET_KEY'),
     'paystack_currency' => env('PAYSTACK_CURRENCY', 'KES'),
 
+    // Free for life (Lifetime plan, Pro limits): comma-separated emails, kept in .env
+    'lifetime_emails' => array_values(array_filter(array_map(fn ($e) => strtolower(trim($e)),
+        explode(',', (string) env('PS_LIFETIME_EMAILS', ''))))),
+
+    // Beta: shown across the app
+    'beta' => (bool) env('PS_BETA', true),
+
     // New customers start here
     'default_plan' => env('PS_DEFAULT_PLAN', 'trial'),
     'trial_days' => (int) env('PS_TRIAL_DAYS', 14),

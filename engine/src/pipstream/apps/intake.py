@@ -28,7 +28,18 @@ async def main(c: Context, *, http: bool = True, client_factory=None) -> None:
         from ..devtools.fake_telegram import FakeTelegramClient
         client_factory = FakeTelegramClient
         c.log.warning("fake Telegram enabled: web logins accept code 12345")
-    login = LoginFlow(c, client_factory=client_factory, on_linked=relink)
+    login = LoginFlow(c, client_factory=client_factory, on_linked=relink, live_source=ing.sources.get)
+    s = c.settings
+    c.status = lambda: {
+        "telegram_api_configured": bool(s.telegram_api_id and s.telegram_api_hash),
+        "telegram_mode": "replay" if ing.replay else ("stand-in" if s.ingestor_fake_telegram else "real"),
+        "confirm_to_saved": s.ingestor_confirm_to_saved,
+        "intake_key": bool(s.intake_private_key),
+        "sessions_connected": len(ing.sources),
+        "channels_tracked": len(ing.chat_to_channel),
+        "channels_with_reader": sum(1 for v in ing.assignment.values() if v),
+        "parser_profiles": len(par.profiles),
+    }
 
     if c.settings.ingestor_confirm_to_saved:
         if c.settings.env == "production":
@@ -46,7 +57,8 @@ async def main(c: Context, *, http: bool = True, client_factory=None) -> None:
         c.bus.broadcast([Topic.CONFIG_CHANGED], on_config),
         c.bus.subscribe([Topic.TG_MESSAGE_NEW, Topic.TG_MESSAGE_EDITED], par.handle, consumer=c.consumer),
         c.bus.subscribe([Topic.TG_LOGIN_REQUEST], login.handle, consumer=c.consumer, concurrency=1,
-                        max_deliveries=1),
+                        max_deliveries=1, delete_after=True,  # carries phone/code/2FA: don't keep it
+                        claim_idle_ms=120_000),  # a login step is never retried by reclaim: a 2nd send_code voids the code
     ]
     if ing.replay:
         from ..services.ingestor.sources.replay_source import ReplaySource

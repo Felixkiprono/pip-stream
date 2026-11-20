@@ -127,8 +127,9 @@ _OPTIONS_DIR = re.compile(r"\b(RISE|FALL|CALL|PUT|HIGHER|LOWER)\b")
 _OPTIONS_DUR = re.compile(rf"\b({NUM})\s*(TICKS?|T|SECONDS?|SECS?|S|MINUTES?|MINS?|M|HOURS?|H|DAYS?|D)\b")
 _STAKE = re.compile(rf"(?:STAKE|AMOUNT|RISK)\s*[:=]?\s*\$?\s*({NUM})|\$\s*({NUM})")
 _SL = re.compile(rf"(?:\b(?:SL|S/L|STOP\s*LOSS|STOPLOSS)|(?<!BUY )(?<!SELL )\bSTOP)\s*[:=@-]?\s*({NUM})\s*(PIPS?)?")
-# "TP1: x", "TP 2: x" carry an index; "TP 2360" does not (the digit is the price).
-_TP = re.compile(rf"\b(?:TP|T/P|TAKE\s*PROFIT|TARGETS?)(?:\d|\s+\d(?=\s*[:=).]\s))?\s*[:=@-]?\s*"
+# "TP1: x", "TP 2: x", "TP 1 ➜ x" (arrow stripped to a space), "TP 3 - x" carry an index;
+# "TP 2360" does not (the digit is the start of the price).
+_TP = re.compile(rf"\b(?:TP|T/P|TAKE\s*PROFIT|TARGETS?)(?:\d|\s+\d(?=\s*[:=).]\s|\s*-?\s+\d))?\s*[:=@-]?\s*"
                  rf"((?:{NUM})(?:\s*(?:/|,|\||&|AND|-)\s*{NUM})*)\s*(PIPS?)?")
 _ENTRY_KW = re.compile(rf"\b(?:ENTRY|ENTER|OPEN|PRICE|ZONE)\s*(?:PRICE|ZONE|AT)?\s*[:=@]?\s*({NUM})"
                        rf"(?:\s*(?:-|/|~|TO)\s*({NUM}))?")

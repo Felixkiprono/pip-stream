@@ -29,6 +29,42 @@ class Accounts
             DB::table('notification_prefs')->insertOrIgnore(['user_id' => $user->id, 'channel' => 'app']);
         });
         AuditLog::record('laravel', 'user_registered', 'user', $user->id);
+        if (in_array(strtolower($user->email), config('pipstream.lifetime_emails'), true)) {
+            $this->grantLifetime($user);
+        }
+    }
+
+    /** Free for life: Lifetime plan, active, no end date. */
+    public function grantLifetime(User $user): void
+    {
+        BillingSubscription::updateOrCreate(['user_id' => $user->id],
+            ['plan_id' => 'lifetime', 'status' => 'active', 'provider' => 'lifetime', 'current_period_end' => null]);
+        AuditLog::record('laravel', 'lifetime_granted', 'user', $user->id);
+        $this->bus->publish('billing.changed', ['user_id' => $user->id, 'plan_id' => 'lifetime', 'status' => 'active']);
+    }
+
+    /** What the app shows about the customer's plan: tier, limits and usage. */
+    public function plan(User $user): array
+    {
+        $b = $user->billing()->with('plan')->first();
+        $p = $b?->plan;
+        $premium = $p && ($p->id === 'lifetime' || $p->price_cents > 0) && $b->isEntitled();
+
+        return [
+            'id' => $p?->id, 'name' => $p?->name ?? 'No plan', 'status' => $b?->status,
+            'tier' => $premium ? 'premium' : 'free',
+            'lifetime' => $p?->id === 'lifetime',
+            'until' => $b?->current_period_end,
+            'days_left' => $b?->current_period_end ? max(0, (int) ceil(now()->diffInDays($b->current_period_end, false))) : null,
+            'limits' => [
+                'brokers' => (int) ($p?->max_accounts ?? 1),
+                'live' => (bool) ($p?->allow_live ?? false),
+            ],
+            'usage' => [
+                'brokers' => $user->brokerAccounts()->where('connector', '!=', 'paper')->count(),
+                'channels' => DB::table('subscriptions')->where('user_id', $user->id)->count(),
+            ],
+        ];
     }
 
     public function practiceAccount(User $user): BrokerAccount

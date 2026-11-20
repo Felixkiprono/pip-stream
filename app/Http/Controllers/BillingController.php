@@ -17,7 +17,7 @@ class BillingController extends Controller
         return [
             'current' => $b ? ['plan' => $b->plan_id, 'plan_name' => $b->plan?->name, 'status' => $b->status,
                 'entitled' => $b->isEntitled(), 'until' => $b->current_period_end] : null,
-            'plans' => Plan::orderBy('price_cents')->get()->map(fn ($p) => ['id' => $p->id, 'name' => $p->name,
+            'plans' => Plan::where('id', '!=', 'lifetime')->orderBy('price_cents')->get()->map(fn ($p) => ['id' => $p->id, 'name' => $p->name,
                 'price' => $p->price_cents / 100, 'currency' => $p->currency, 'live' => $p->allow_live,
                 'brokers' => $p->max_accounts]),
             'can_pay' => (bool) config('pipstream.paystack_secret'),

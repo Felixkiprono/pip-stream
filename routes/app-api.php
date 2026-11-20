@@ -5,6 +5,7 @@ use App\Http\Controllers\AuthController;
 use App\Http\Controllers\BillingController;
 use App\Http\Controllers\BrokerController;
 use App\Http\Controllers\ChannelController;
+use App\Http\Controllers\DetailController;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\SettingsController;
 use App\Http\Controllers\TelegramController;
@@ -18,12 +19,17 @@ Route::middleware('throttle:10,1')->group(function () {
 });
 Route::post('auth/logout', [AuthController::class, 'logout'])->middleware('auth');
 
-Route::middleware('auth')->group(function () {
+Route::middleware(['auth', 'active'])->group(function () {
     // ------------------------------------------------------------ home
     Route::get('home', [HomeController::class, 'home']);
+    Route::get('pulse', [HomeController::class, 'pulse']);
+    Route::get('stats', [HomeController::class, 'stats']);
     Route::get('trades', [HomeController::class, 'trades']);
     Route::get('alerts', [HomeController::class, 'alerts']);
     Route::post('alerts/read', [HomeController::class, 'markRead']);
+    Route::get('alerts/{id}', [DetailController::class, 'alert']);
+    Route::get('trades/{position}', [DetailController::class, 'position']);
+    Route::get('signals/{signal}', [DetailController::class, 'signal']);
     Route::post('pause', [HomeController::class, 'pause']);
 
     // ------------------------------------------------------------ Telegram linking
@@ -31,6 +37,8 @@ Route::middleware('auth')->group(function () {
     Route::middleware('throttle:20,1')->group(function () {
         Route::post('telegram/phone', [TelegramController::class, 'phone']);
         Route::post('telegram/code', [TelegramController::class, 'code']);
+        Route::post('telegram/resend', [TelegramController::class, 'resend']);
+        Route::post('telegram/qr', [TelegramController::class, 'qr']);
         Route::post('telegram/password', [TelegramController::class, 'password']);
     });
     Route::get('telegram/requests/{rid}', [TelegramController::class, 'request']);
@@ -59,12 +67,20 @@ Route::middleware('auth')->group(function () {
     // ------------------------------------------------------------ admin
     Route::middleware('admin')->prefix('admin')->group(function () {
         Route::get('overview', [AdminController::class, 'overview']);
+        Route::get('dashboard', [AdminController::class, 'dashboard']);
+        Route::get('system', [AdminController::class, 'system']);
+        Route::post('system/telegram-test', [AdminController::class, 'telegramTest'])->middleware('throttle:6,1');
         Route::post('kill-switch', [AdminController::class, 'killSwitch']);
         Route::get('channels', [AdminController::class, 'channels']);
         Route::put('channels/{channel}', [AdminController::class, 'updateChannel']);
         Route::post('parse-preview', [AdminController::class, 'parsePreview']);
         Route::get('review', [AdminController::class, 'review']);
         Route::get('users', [AdminController::class, 'users']);
+        Route::get('users/{user}', [AdminController::class, 'user']);
+        Route::post('users/{user}/status', [AdminController::class, 'userStatus']);
+        Route::post('users/{user}/pause', [AdminController::class, 'userPause']);
+        Route::post('users/{user}/role', [AdminController::class, 'userRole']);
+        Route::post('users/{user}/trial', [AdminController::class, 'userTrial']);
         Route::get('audit', [AdminController::class, 'audit']);
     });
 });

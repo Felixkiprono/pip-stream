@@ -43,9 +43,21 @@ class TelegramController extends Controller
 
     public function code(Request $r)
     {
-        $data = $r->validate(['code' => ['required', 'string', 'regex:/^\d{5,6}$/']]);
+        $data = $r->validate(['code' => ['required', 'string', 'regex:/^\d{4,8}$/']]);
 
         return $this->link->request($this->account($r), 'sign_in', ['code' => $data['code']]);
+    }
+
+    /** Log in by scanning a QR with the Telegram app (no login code). Poll telegram/requests/{rid}. */
+    public function qr(Request $r)
+    {
+        return $this->link->request($this->account($r), 'qr');
+    }
+
+    /** Same login, next delivery method (SMS / call), keeping the code already sent valid. */
+    public function resend(Request $r)
+    {
+        return $this->link->request($this->account($r), 'resend');
     }
 
     public function password(Request $r)

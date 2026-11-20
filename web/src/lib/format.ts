@@ -1,6 +1,16 @@
+/** Parse ISO and Postgres-style timestamps ("2026-11-20 11:52:13.672036+00") in every browser. */
+export function toDate(v: string): Date {
+  const iso = v
+    .replace(' ', 'T')
+    .replace(/(\.\d{3})\d+/, '$1')
+    .replace(/([+-]\d{2})$/, '$1:00')
+  const d = new Date(iso)
+  return isNaN(d.getTime()) ? new Date(v) : d
+}
+
 export function ago(iso: string | null | undefined): string {
   if (!iso) return ''
-  const s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000)
+  const s = Math.max(0, (Date.now() - toDate(iso).getTime()) / 1000)
   if (s < 45) return 'just now'
   if (s < 3600) return `${Math.round(s / 60)}m ago`
   if (s < 86400) return `${Math.round(s / 3600)}h ago`

@@ -27,12 +27,16 @@ class TelethonSource:
         from telethon import TelegramClient, events
         from telethon.sessions import StringSession
 
+        from ..login_flow import DEVICE
         client = TelegramClient(StringSession(self._session), self._api_id, self._api_hash,
-                                flood_sleep_threshold=60, receive_updates=True)
+                                flood_sleep_threshold=60, receive_updates=True, **DEVICE)
         self._session = None  # drop plaintext reference
         await client.connect()
         if not await client.is_user_authorized():
             raise RuntimeError(f"telegram session for {self.account_id} is not authorized")
+        # A fresh StringSession has no entity cache; without it Telegram's channel updates can't
+        # be resolved and posts are silently missed. One dialogs fetch fills it.
+        await client.get_dialogs()
 
         async def _emit(event, is_edit: bool):
             m = event.message
@@ -48,6 +52,11 @@ class TelethonSource:
         client.add_event_handler(lambda e: _emit(e, True), events.MessageEdited())
         self._client = client
         log.info("telethon source connected", extra={"ctx": {"telegram_account_id": self.account_id}})
+
+    async def whoami(self) -> dict:
+        u = await self._client.get_me()
+        name = " ".join(x for x in (u.first_name, u.last_name) if x)
+        return {"name": name, "username": u.username}
 
     async def send_to_saved(self, text: str) -> None:
         """Write a note to this account's own Saved Messages (never to a channel)."""

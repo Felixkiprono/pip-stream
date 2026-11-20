@@ -9,7 +9,7 @@ import { PositionRow } from './Home'
 
 export default function Trades() {
   const [tab, setTab] = useState<'open' | 'closed'>('open')
-  const q = useQuery({ queryKey: ['trades'], queryFn: () => api<{ trades: Position[] }>('trades'), refetchInterval: 15_000 })
+  const q = useQuery({ queryKey: ['trades'], queryFn: () => api<{ trades: Position[] }>('trades'), refetchInterval: 30_000 })
   const rows = (q.data?.trades ?? []).filter((t) => t.status === tab)
   return (
     <Page title="Trades">

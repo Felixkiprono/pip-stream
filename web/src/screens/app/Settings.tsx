@@ -3,6 +3,7 @@ import { ChevronRight, CreditCard, LogOut, Mail, Send, Shield, Wallet } from 'lu
 import type { ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router'
 import { Page, Section } from '../../components/AppShell'
+import { PlanCard, ThemeSwitch } from '../../components/Plan'
 import { InstallCard } from '../../components/Install'
 import { Card, Toggle } from '../../components/ui'
 import { api, post, put, settle } from '../../lib/api'
@@ -45,6 +46,14 @@ export default function Settings() {
           <span className="block truncate text-sm text-ink-3">{user?.email}</span>
         </span>
       </Card>
+
+      <Section title="Your plan">
+        <PlanCard plan={user?.plan} />
+      </Section>
+
+      <Section title="Appearance">
+        <ThemeSwitch />
+      </Section>
 
       <Section title="Connections">
         <Card className="py-0">

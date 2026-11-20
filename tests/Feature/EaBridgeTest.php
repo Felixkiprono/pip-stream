@@ -226,5 +226,8 @@ class EaBridgeTest extends TestCase
             json_encode(['state' => ['balance' => 0, 'positions' => [], 'trade_allowed' => true, 'broker_connected' => false]]))->assertOk();
         $this->actingAs($u)->getJson("/api/v1/brokers/{$b['id']}")->assertJsonPath('broker.status.state', 'error')
             ->assertJsonPath('broker.status.detail', "MetaTrader isn't connected to your broker. In MetaTrader: File → Login to Trade Account.");
+        $this->call('POST', '/ea/v1/sync', [], [], [], ['HTTP_X-PipStream-Key' => $key, 'CONTENT_TYPE' => 'application/json'],
+            json_encode(['state' => ['positions' => [], 'broker_connected' => false, 'quotes' => ['GBPJPY' => [190.1, 190.2]]]]))->assertOk();
+        $this->assertFalse($this->redis()->get(config('pipstream.stream_prefix').':quote:GBPJPY'));  // frozen prices aren't used
     }
 }

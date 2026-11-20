@@ -250,7 +250,9 @@ class EaController extends Controller
             ]), ['ex' => 3600]);
         }
         if (is_array($state = $r->input('state'))) {
-            $this->storeQuotes($redis, (array) ($state['quotes'] ?? []));
+            if (($state['broker_connected'] ?? true) !== false) {  // a logged-out terminal shows frozen prices
+                $this->storeQuotes($redis, (array) ($state['quotes'] ?? []));
+            }
             unset($state['quotes']);
             $state['at'] = $now;
             $state['positions'] = array_slice((array) ($state['positions'] ?? []), 0, 300);

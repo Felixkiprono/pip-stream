@@ -318,8 +318,12 @@ class ExecutionRouter:
         from ...common.events import TradeIntent, utcnow
         from datetime import timedelta
         specs = (await conn.account_info(list(self.catalog.symbols))).symbols
-        pick = next((s for want in ("EURUSD", "XAUUSD", "GBPUSD", "USDJPY") for s in specs
-                     if s.upper().startswith(want)), next(iter(specs), None))
+        # forex and gold close Friday 21:00 to Sunday 21:00 UTC; crypto trades all weekend
+        now = utcnow()
+        weekend = now.weekday() == 5 or (now.weekday() == 6 and now.hour < 21) or (now.weekday() == 4 and now.hour >= 21)
+        wants = ("BTCUSD", "ETHUSD") if weekend else ()
+        wants += ("EURUSD", "XAUUSD", "GBPUSD", "USDJPY")
+        pick = next((s for want in wants for s in specs if s.upper().startswith(want)), next(iter(specs), None))
         if pick is None:
             return await step("Test order", False, "no tradable symbol reported by the terminal")
         vol = specs[pick].volume_min
@@ -330,7 +334,10 @@ class ExecutionRouter:
         t0 = time.monotonic()
         res = await conn.open(intent)
         if not res.ok or not res.ticket:
-            return await step("Test order opened", False, res.error or "rejected")
+            why = res.error or "rejected"
+            if weekend and "BTC" not in pick and "ETH" not in pick:
+                why += " (forex is closed at the weekend: add BTCUSD to Market Watch to test now, or try again Sunday night)"
+            return await step("Test order opened", False, why)
         await step("Test order opened", True, f"bought {vol:g} {pick} at {res.price or '?'} (ticket {res.ticket})",
                    (time.monotonic() - t0) * 1000)
         t1 = time.monotonic()

@@ -61,6 +61,9 @@ $ini = Join-Path $t.Data 'config\pipstream-start.ini'
 "[Experts]`r`nAllowLiveTrading=1`r`nEnabled=1`r`nAllowDllImport=0`r`nAccount=0`r`nProfile=0`r`n[StartUp]`r`nExpert=PipStream`r`nSymbol=EURUSD`r`nPeriod=H1`r`n" | Set-Content $ini -Encoding Unicode
 Set-Clipboard -Value $Url -ErrorAction SilentlyContinue
 Start-Process (Join-Path $t.Prog $Exe) -ArgumentList "/config:`"$ini`""
+# MT reads the startup file once; left behind, an auto-update restart would reuse it
+Start-Sleep -Seconds 20
+Remove-Item $ini -ErrorAction SilentlyContinue
 
 Say 'Done. MetaTrader is opening with PipStream on a EURUSD chart.'
 Write-Host "One thing MetaTrader only lets you do yourself (first time only): Tools > Options > Expert Advisors,"

@@ -71,6 +71,9 @@ if [ -n "$WINE" ]; then
 else
   open -a "$APP"
 fi
+# MT5 reads the startup file once; left behind, an auto-update restart would reuse it
+INI="$(pwd)/config/pipstream-start.ini"
+(sleep 30; rm -f "$INI") >/dev/null 2>&1 &
 
 say "Done. MetaTrader is opening with PipStream on a EURUSD chart."
 cat <<MSG

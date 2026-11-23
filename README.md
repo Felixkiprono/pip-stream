@@ -56,4 +56,6 @@ Site: *Use repository docker-compose.yml*, ingress service **nginx**, port **80*
   through MetaApi; token at https://app.metaapi.cloud/token)
 - `src/.env`: Laravel settings from `.env.example` (APP_KEY, Paystack, bot token, mail)
 
+Prefer NanoDeploi's own services over the repository compose file? See `docs/deploy-nanodeploi.md`.
+
 `docker-compose.yml` shows what runs where. Architecture notes are in `docs/architecture.md`.

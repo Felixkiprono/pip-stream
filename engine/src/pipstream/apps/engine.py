@@ -18,6 +18,9 @@ Environment (site-root .env, passed to the engine container):
     PS_INTENT_SIGNING_KEY                                                -> risk only
     PS_INTENT_VERIFY_KEY, PS_EXECUTOR_PRIVATE_KEY, PS_MT5_*, PS_DERIV_*  -> executor only
     PS_ENGINE_WORKERS=executor,risk,intake   (optional: run a subset, e.g. scale intake alone)
+    PS_REDIS_ADMIN_URL, or PS_REDIS_APPLY_ACL=1 with the host's REDIS_URL  (optional: Redis without
+        an ACL file; the engine creates the worker and laravel users itself, see permissions.apply_acl)
+    DATABASE_URL is used when PS_DATABASE_URL is not set.
 """
 from __future__ import annotations
 
@@ -69,7 +72,21 @@ class Supervisor:
         self.procs: dict[str, asyncio.subprocess.Process] = {}
         self.stopping = False
 
+    def ensure_acl(self) -> None:
+        """Hosts without an ACL file (NanoDeploi's Redis): (re)create the workers' Redis users
+        before a worker starts, so a Redis restart heals with the next worker restart."""
+        from ..common.permissions import admin_url_from_env, apply_acl
+        url = admin_url_from_env(self.env)
+        if not url:
+            return
+        try:
+            users = apply_acl(url, self.env, self.env.get("PS_STREAM_PREFIX", "ps"))
+            log("redis users applied", users=users)
+        except Exception as e:  # keep going: the worker fails to log in and is retried with backoff
+            log("redis users not applied", error=f"{type(e).__name__}: {e}")
+
     async def spawn(self, w: str) -> None:
+        await asyncio.to_thread(self.ensure_acl)
         self.procs[w] = await asyncio.create_subprocess_exec(
             sys.executable, "-m", f"pipstream.apps.{w}", env=child_env(w, self.env))
         log("worker started", worker=w, pid=self.procs[w].pid)
@@ -113,6 +130,9 @@ class Supervisor:
 
 def main() -> None:
     env = dict(os.environ)
+    # Hosts that hand out one DATABASE_URL (NanoDeploi, Heroku-style) instead of PS_DATABASE_URL.
+    if not env.get("PS_DATABASE_URL") and env.get("DATABASE_URL"):
+        env["PS_DATABASE_URL"] = env["DATABASE_URL"]
     wanted = tuple(w.strip() for w in env.get("PS_ENGINE_WORKERS", ",".join(ORDER)).split(",") if w.strip())
     workers = tuple(w for w in ORDER if w in wanted)
     if not workers:

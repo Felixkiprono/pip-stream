@@ -100,6 +100,39 @@ def acl_line(service: str, password: str, prefix: str = "ps") -> str:
     return " ".join(parts)
 
 
+def apply_acl(admin_url: str, env: dict[str, str] | None = None, prefix: str = "ps") -> list[str]:
+    """Create or update the per-service Redis users on a running server (ACL SETUSER), for hosts
+    whose Redis can't load an ACL file (e.g. NanoDeploi's managed Redis, which only takes
+    --requirepass). Connects with the admin/default credentials in `admin_url`. Users made this
+    way live in memory only, so the engine re-applies them every time it starts a worker.
+    The default user is left as the host configured it."""
+    import redis as _redis
+
+    env = dict(os.environ if env is None else env)
+    r = _redis.Redis.from_url(admin_url, socket_timeout=5)
+    done = []
+    try:
+        for svc in SERVICES:
+            pw = env.get(f"PS_REDIS_PASSWORD_{svc.upper()}")
+            if not pw:
+                raise SystemExit(f"missing PS_REDIS_PASSWORD_{svc.upper()}")
+            rules = acl_line(svc, pw, prefix).split()[2:]  # drop "user <name>"
+            r.execute_command("ACL", "SETUSER", svc, "reset", *rules)
+            done.append(svc)
+    finally:
+        r.close()
+    return done
+
+
+def admin_url_from_env(env: dict[str, str]) -> str | None:
+    """PS_REDIS_ADMIN_URL, or the host's own REDIS_URL when PS_REDIS_APPLY_ACL is on."""
+    if env.get("PS_REDIS_ADMIN_URL"):
+        return env["PS_REDIS_ADMIN_URL"]
+    if env.get("PS_REDIS_APPLY_ACL", "").lower() in ("1", "true", "yes", "on") and env.get("REDIS_URL"):
+        return env["REDIS_URL"]
+    return None
+
+
 def render_acl(env: dict[str, str] | None = None, prefix: str = "ps") -> str:
     env = dict(os.environ if env is None else env)
     lines = ["user default off resetkeys -@all"]

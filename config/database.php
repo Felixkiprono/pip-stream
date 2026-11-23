@@ -3,6 +3,10 @@
 use Illuminate\Support\Str;
 use Pdo\Mysql;
 
+// When the host owns REDIS_PASSWORD/REDIS_URL (NanoDeploi's generated stack), Laravel still logs in
+// as its own ACL user "laravel" with PS_REDIS_PASSWORD_LARAVEL; the engine creates that user.
+$psRedisLaravel = env('PS_REDIS_PASSWORD_LARAVEL');
+
 return [
 
     /*
@@ -156,10 +160,10 @@ return [
         ],
 
         'default' => [
-            'url' => env('REDIS_URL'),
+            'url' => $psRedisLaravel ? null : env('REDIS_URL'),
             'host' => env('REDIS_HOST', '127.0.0.1'),
-            'username' => env('REDIS_USERNAME'),
-            'password' => env('REDIS_PASSWORD'),
+            'username' => $psRedisLaravel ? 'laravel' : env('REDIS_USERNAME'),
+            'password' => $psRedisLaravel ?: env('REDIS_PASSWORD'),
             'port' => env('REDIS_PORT', '6379'),
             'database' => env('REDIS_DB', '0'),
             'max_retries' => env('REDIS_MAX_RETRIES', 3),
@@ -170,10 +174,10 @@ return [
 
         // PipStream event streams (ps:stream:*), kill switch and health keys: no prefix.
         'streams' => [
-            'url' => env('REDIS_URL'),
+            'url' => $psRedisLaravel ? null : env('REDIS_URL'),
             'host' => env('REDIS_HOST', '127.0.0.1'),
-            'username' => env('REDIS_USERNAME'),
-            'password' => env('REDIS_PASSWORD'),
+            'username' => $psRedisLaravel ? 'laravel' : env('REDIS_USERNAME'),
+            'password' => $psRedisLaravel ?: env('REDIS_PASSWORD'),
             'port' => env('REDIS_PORT', '6379'),
             'database' => '0',
             'read_timeout' => 5,
@@ -181,10 +185,10 @@ return [
         ],
 
         'cache' => [
-            'url' => env('REDIS_URL'),
+            'url' => $psRedisLaravel ? null : env('REDIS_URL'),
             'host' => env('REDIS_HOST', '127.0.0.1'),
-            'username' => env('REDIS_USERNAME'),
-            'password' => env('REDIS_PASSWORD'),
+            'username' => $psRedisLaravel ? 'laravel' : env('REDIS_USERNAME'),
+            'password' => $psRedisLaravel ?: env('REDIS_PASSWORD'),
             'port' => env('REDIS_PORT', '6379'),
             'database' => env('REDIS_CACHE_DB', '0'),
             'max_retries' => env('REDIS_MAX_RETRIES', 3),

@@ -4,6 +4,7 @@
   pipstream run intake|risk|executor   run one worker on its own (dev, or to scale one part)
   pipstream keys                       print fresh secrets for the site-root .env
   pipstream acl                        render the Redis ACL file from PS_REDIS_PASSWORD_* env vars
+  pipstream acl --apply                create those users on a running Redis (no ACL file needed)
   pipstream health SERVICE             container healthcheck (heartbeat under 30 s old)
   pipstream dev-schema                 apply database/schema/pipstream.sql to an EMPTY dev database
   pipstream dev-seed [FILE]            load config/pipstream.yaml (dev / replay demos only)
@@ -110,7 +111,9 @@ def main(argv: list[str] | None = None) -> None:
     rp = sub.add_parser("run")
     rp.add_argument("app", choices=APPS)
     sub.add_parser("keys")
-    sub.add_parser("acl")
+    ap_acl = sub.add_parser("acl")
+    ap_acl.add_argument("--apply", action="store_true",
+                        help="create the users on the running Redis (PS_REDIS_ADMIN_URL, or REDIS_URL with PS_REDIS_APPLY_ACL=1)")
     hp = sub.add_parser("health")
     hp.add_argument("app", choices=APPS)
     sub.add_parser("dev-schema")
@@ -131,7 +134,16 @@ def main(argv: list[str] | None = None) -> None:
     elif a.cmd == "keys":
         sys.stdout.write(keys())
     elif a.cmd == "acl":
-        sys.stdout.write(render_acl())
+        if a.apply:
+            import os
+            from .common.permissions import admin_url_from_env, apply_acl
+            env = dict(os.environ)
+            url = admin_url_from_env(env)
+            if not url:
+                raise SystemExit("set PS_REDIS_ADMIN_URL, or PS_REDIS_APPLY_ACL=1 with REDIS_URL")
+            print("applied:", ", ".join(apply_acl(url, env, s.stream_prefix)))
+        else:
+            sys.stdout.write(render_acl())
     elif a.cmd == "health":
         from .common.healthcheck import main as health
         workers = ("intake", "risk", "executor") if a.app == "engine" else (a.app,)

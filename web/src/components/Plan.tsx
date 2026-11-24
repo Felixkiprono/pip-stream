@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import { Crown, FlaskConical, Monitor, Moon, Sun } from 'lucide-react'
+import { Award, Crown, FlaskConical, Monitor, Moon, Sun } from 'lucide-react'
 import { Link } from 'react-router'
 import type { PlanInfo } from '../lib/types'
 import { useTheme, type Theme } from '../lib/theme'
@@ -20,8 +20,19 @@ export function CrownMark({ plan, className }: { plan?: PlanInfo | null; classNa
   return <Crown className={clsx('size-4 fill-current text-warn', className)} aria-label={`${plan.name} member`} />
 }
 
+/** "Founding member #3": one of the first customers, free for life with every feature. */
+export function FoundingBadge({ number, className }: { number?: number | null; className?: string }) {
+  if (!number) return null
+  return (
+    <span className={clsx('inline-flex items-center gap-1 rounded-full bg-[linear-gradient(135deg,#f5c542,#e0a526)] px-2.5 py-0.5 text-xs font-bold text-[#2a1d05]', className)} title="One of PipStream's first members: free for life, every feature unlocked">
+      <Award className="size-3.5" /> Founding member #{number}
+    </span>
+  )
+}
+
 export function PlanBadge({ plan }: { plan?: PlanInfo | null }) {
   if (!plan) return null
+  if (plan.founding) return <FoundingBadge number={plan.founding} />
   const premium = plan.tier === 'premium'
   return (
     <span className={clsx('inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold', premium ? 'bg-warn-soft text-warn' : 'bg-surface-2 text-ink-2')}>
@@ -58,11 +69,13 @@ export function PlanCard({ plan }: { plan?: PlanInfo | null }) {
         </span>
         <span className="min-w-0 flex-1">
           <span className="flex flex-wrap items-center gap-2 font-bold">
-            {plan.lifetime ? 'Lifetime member' : premium ? `${plan.name} member` : 'Free plan'}
+            {plan.founding ? 'Founding member' : plan.lifetime ? 'Lifetime member' : premium ? `${plan.name} member` : 'Free plan'}
             <PlanBadge plan={plan} />
           </span>
           <span className="block text-sm text-ink-2">
-            {plan.lifetime
+            {plan.founding
+              ? `You were #${plan.founding} to join: free for life, with every feature unlocked.`
+              : plan.lifetime
               ? 'Free for life, with every Pro feature.'
               : premium
                 ? plan.until ? `Renews ${new Date(plan.until).toLocaleDateString()}.` : 'Active.'

@@ -4,7 +4,7 @@ import { Navigate, Route, Routes, useLocation } from 'react-router'
 import { AppShell } from './components/AppShell'
 import { Spinner } from './components/ui'
 import { api } from './lib/api'
-import { useSession } from './lib/session'
+import { isAdmin, useSession } from './lib/session'
 import type { Home } from './lib/types'
 import Auth from './screens/onboarding/Auth'
 import Broker from './screens/onboarding/Broker'
@@ -14,6 +14,7 @@ import Plan from './screens/onboarding/Plan'
 import Style from './screens/onboarding/Style'
 import { TgCode, TgLinked, TgPassword, TgPhone, TgQr } from './screens/onboarding/Telegram'
 import Welcome from './screens/onboarding/Welcome'
+import { ForgotPassword, ResetPassword } from './screens/onboarding/Password'
 import Landing from './screens/Landing'
 import AlertsScreen from './screens/app/Alerts'
 import BillingScreen from './screens/app/Billing'
@@ -35,6 +36,7 @@ const Admin = {
   Audit: lazy(() => import('./screens/admin/Admin').then((m) => ({ default: m.AdminAudit }))),
   User: lazy(() => import('./screens/admin/Admin').then((m) => ({ default: m.AdminUser }))),
   System: lazy(() => import('./screens/admin/Admin').then((m) => ({ default: m.AdminSystem }))),
+  Email: lazy(() => import('./screens/admin/Email')),
 }
 
 function RequireUser({ admin, children }: { admin?: boolean; children: ReactNode }) {
@@ -42,7 +44,7 @@ function RequireUser({ admin, children }: { admin?: boolean; children: ReactNode
   const loc = useLocation()
   if (loading) return <Spinner />
   if (!user) return <Navigate to="/login" replace state={{ from: loc.pathname }} />
-  if (admin && user.role !== 'admin') return <Navigate to="/app" replace />
+  if (admin && !isAdmin(user)) return <Navigate to="/app" replace />
   return <>{children}</>
 }
 
@@ -59,6 +61,8 @@ export default function App() {
         <Route path="/welcome" element={<Welcome />} />
         <Route path="/signup" element={<Auth mode="signup" />} />
         <Route path="/login" element={<Auth mode="login" />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
 
         <Route path="/start/telegram" element={<RequireUser><TgPhone /></RequireUser>} />
         <Route path="/start/code" element={<RequireUser><TgCode /></RequireUser>} />
@@ -93,6 +97,7 @@ export default function App() {
           <Route path="users/:id" element={<Admin.User />} />
           <Route path="audit" element={<Admin.Audit />} />
           <Route path="system" element={<Admin.System />} />
+          <Route path="email" element={<Admin.Email />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

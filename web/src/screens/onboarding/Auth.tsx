@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router'
 import { Button, ErrorNote, Field, Step } from '../../components/ui'
 import { ApiError, post } from '../../lib/api'
-import { nextStep, useSession } from '../../lib/session'
+import { isAdmin, nextStep, useSession } from '../../lib/session'
 import type { User } from '../../lib/types'
 
 export default function Auth({ mode }: { mode: 'signup' | 'login' }) {
@@ -20,7 +20,7 @@ export default function Auth({ mode }: { mode: 'signup' | 'login' }) {
     try {
       const { user } = await post<{ user: User }>(signup ? 'auth/register' : 'auth/login', signup ? f : { email: f.email, password: f.password })
       await refresh()
-      nav(user.role === 'admin' ? '/admin' : nextStep(user), { replace: true })
+      nav(isAdmin(user) ? '/admin' : nextStep(user), { replace: true })
     } catch (e) {
       setErr(e as ApiError)
     } finally {
@@ -34,7 +34,7 @@ export default function Auth({ mode }: { mode: 'signup' | 'login' }) {
         step={signup ? 1 : undefined}
         back="/"
         title={signup ? 'Create your account' : 'Welcome back'}
-        subtitle={signup ? 'It takes a minute. You start with a free trial and practice money.' : 'Sign in to see your trades.'}
+        subtitle={signup ? 'It takes a minute. You start with a free trial and practice money. The first 10 people to join are free for life.' : 'Sign in to see your trades.'}
         action={
           <div className="space-y-3">
             <Button type="submit" block busy={busy}>
@@ -65,7 +65,7 @@ export default function Auth({ mode }: { mode: 'signup' | 'login' }) {
           value={f.password}
           onChange={(e) => setF({ ...f, password: e.target.value })}
           error={err?.field('password')}
-          hint={signup ? 'At least 8 characters.' : undefined}
+          hint={signup ? 'At least 8 characters.' : <Link className="font-semibold text-brand" to="/forgot-password">Forgot your password?</Link>}
           required
         />
         {err && !Object.keys(err.errors).length && <ErrorNote>{err.message}</ErrorNote>}

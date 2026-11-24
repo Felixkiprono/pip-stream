@@ -4,7 +4,9 @@ namespace App\Pipstream;
 
 use App\Models\Channel;
 use App\Models\User;
+use App\Notifications\Connected;
 use App\Notifications\TradeAlert;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 
 /** What Laravel does with each engine event it consumes. */
@@ -14,13 +16,24 @@ class EventHandler
     {
         $p = $event['payload'];
         match ($event['topic']) {
-            'tg.login.status' => TelegramLink::remember($p),
+            'tg.login.status' => $this->tgStatus($p),
             'trade.executed', 'trade.failed' => $this->trade($p, $event['trace_id'] ?? null),
             'trade.closed' => $this->closed($p),
             'risk.limit_hit' => $this->limit($p),
             'signal.rejected' => Log::info('signal rejected', ['channel_id' => $p['channel_id'] ?? null, 'reason' => $p['reason'] ?? null]),
             default => null,
         };
+    }
+
+    private function tgStatus(array $p): void
+    {
+        TelegramLink::remember($p);
+        // "Your Telegram is connected": once per account per day, however many times the event replays
+        if (($p['status'] ?? null) === 'linked' && ! empty($p['user_id']) && ! empty($p['telegram_account_id'])
+            && Cache::add("mail:tg-linked:{$p['telegram_account_id']}", 1, now()->addDay())
+            && ($u = $this->user($p['user_id']))) {
+            Accounts::safely(fn () => $u->notify(new Connected('telegram', $p['phone_hint'] ?? null)));
+        }
     }
 
     private function user(string $id): ?User

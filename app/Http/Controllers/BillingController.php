@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Plan;
+use App\Pipstream\Accounts;
 use App\Pipstream\Ids;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
@@ -28,6 +29,7 @@ class BillingController extends Controller
     {
         $plan = Plan::findOrFail($r->validate(['plan' => ['required', 'string']])['plan']);
         abort_if($plan->price_cents <= 0, 422, 'This plan is free.');
+        abort_if(Accounts::isLifetime($r->user()), 422, 'You are a Lifetime member: every feature is already yours, free.');
         abort_unless(config('pipstream.paystack_secret'), 503, 'Payments are not set up yet.');
         $ref = Ids::new('pay');
         $res = Http::withToken(config('pipstream.paystack_secret'))->timeout(15)

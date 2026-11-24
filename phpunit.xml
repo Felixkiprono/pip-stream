@@ -27,6 +27,9 @@
         <env name="PS_TELEGRAM_BOT_WEBHOOK_SECRET" value="test-bot-secret"/>
         <env name="PAYSTACK_SECRET_KEY" value="sk_test_secret"/>
         <env name="MAIL_MAILER" value="array"/>
+        <env name="PS_FOUNDING_SLOTS" value="0"/>
+        <env name="PS_SUPERADMIN_PASSWORD" value=""/>
+        <env name="RESEND_API_KEY" value=""/>
         <env name="QUEUE_CONNECTION" value="sync"/>
         <env name="SESSION_DRIVER" value="array"/>
         <env name="PULSE_ENABLED" value="false"/>

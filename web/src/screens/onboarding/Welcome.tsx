@@ -1,11 +1,11 @@
 import { BellRing, Radio, ShieldCheck } from 'lucide-react'
 import { Link, Navigate } from 'react-router'
 import { Logo } from '../../components/ui'
-import { nextStep, useSession } from '../../lib/session'
+import { isAdmin, nextStep, useSession } from '../../lib/session'
 
 export default function Welcome() {
   const { user } = useSession()
-  if (user) return <Navigate to={user.role === 'admin' ? '/admin' : nextStep(user)} replace />
+  if (user) return <Navigate to={isAdmin(user) ? '/admin' : nextStep(user)} replace />
   return (
     <div className="mx-auto flex min-h-dvh max-w-md flex-col px-5 safe-top">
       <header className="flex h-16 items-center">

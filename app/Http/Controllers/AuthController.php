@@ -4,8 +4,11 @@ namespace App\Http\Controllers;
 
 use App\Models\User;
 use App\Pipstream\Accounts;
+use Illuminate\Auth\Events\PasswordReset;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Password as PasswordBroker;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rules\Password;
 use Illuminate\Validation\ValidationException;
 
@@ -18,7 +21,7 @@ class AuthController extends Controller
         }
 
         return ['id' => $u->id, 'name' => $u->name, 'email' => $u->email, 'role' => $u->role,
-            'onboarding' => $accounts->onboarding($u), 'plan' => $accounts->plan($u), 'beta' => config('pipstream.beta')];
+            'founding' => $u->founding_number, 'onboarding' => $accounts->onboarding($u), 'plan' => $accounts->plan($u), 'beta' => config('pipstream.beta')];
     }
 
     public function me(Request $r, Accounts $accounts)
@@ -29,8 +32,19 @@ class AuthController extends Controller
 
             return ['user' => null];
         }
+        if ($r->user()) {
+            $accounts->ensureFounding($r->user());
+        }
 
         return ['user' => self::present($r->user(), $accounts)];
+    }
+
+    /** Public: how many founding (free-for-life) spots are left, for the landing page. */
+    public function founding()
+    {
+        $slots = (int) config('pipstream.founding_slots');
+
+        return ['slots' => $slots, 'left' => max(0, $slots - User::whereNotNull('founding_number')->count())];
     }
 
     public function register(Request $r, Accounts $accounts)
@@ -40,6 +54,7 @@ class AuthController extends Controller
             'email' => ['required', 'email', 'max:190', 'unique:users,email'],
             'password' => ['required', Password::min(8)],
         ]);
+        $data['email'] = strtolower($data['email']);
         $user = User::create($data + ['role' => 'customer']);
         $accounts->onboard($user);
         Auth::login($user, remember: true);
@@ -57,6 +72,42 @@ class AuthController extends Controller
         $r->session()->regenerate();
 
         return ['user' => self::present($r->user(), $accounts)];
+    }
+
+    /** "Forgot password": always the same answer, so it can't be used to find out who has an account. */
+    public function forgot(Request $r)
+    {
+        $email = strtolower($r->validate(['email' => ['required', 'email']])['email']);
+        $status = PasswordBroker::sendResetLink(['email' => $email, 'status' => 'active']);
+        if ($status === PasswordBroker::RESET_THROTTLED) {
+            throw ValidationException::withMessages(['email' => 'We just sent a link. Check your inbox, or try again in a minute.']);
+        }
+
+        return ['ok' => true, 'message' => 'If that email has a PipStream account, a reset link is on its way.'];
+    }
+
+    public function reset(Request $r, Accounts $accounts)
+    {
+        $data = $r->validate([
+            'token' => ['required', 'string'],
+            'email' => ['required', 'email'],
+            'password' => ['required', Password::min(8)],
+        ]);
+        $data['email'] = strtolower($data['email']);
+        $status = PasswordBroker::reset($data, function (User $user, string $password) {
+            $user->forceFill(['password' => $password, 'remember_token' => Str::random(60)])->save();
+            event(new PasswordReset($user));
+        });
+        if ($status !== PasswordBroker::PASSWORD_RESET) {
+            throw ValidationException::withMessages(['email' => 'This reset link is invalid or has expired. Ask for a new one.']);
+        }
+        $user = User::where('email', $data['email'])->first();
+        if ($user && $user->status === 'active') {
+            Auth::login($user, remember: true);
+            $r->session()->regenerate();
+        }
+
+        return ['user' => self::present(Auth::user(), $accounts)];
     }
 
     public function logout(Request $r)

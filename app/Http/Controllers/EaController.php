@@ -3,6 +3,9 @@
 namespace App\Http\Controllers;
 
 use App\Models\BrokerAccount;
+use App\Models\User;
+use App\Notifications\Connected;
+use App\Pipstream\Accounts;
 use App\Pipstream\Bus;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -155,6 +158,9 @@ class EaController extends Controller
         $b->update(['label' => $label, 'enabled' => true, 'symbol_map' => array_merge((array) $b->symbol_map, [
             '_platform' => $p['platform'], '_ea_key_hash' => self::hashKey($key),
             '_login_hint' => $p['login'] ? '•••'.substr($p['login'], -3) : null])]);
+        if ($u = User::find($b->user_id)) {
+            Accounts::safely(fn () => $u->notify(new Connected('broker', $label)));
+        }
 
         return $key;
     }

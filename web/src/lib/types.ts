@@ -6,11 +6,12 @@ export type Onboarding = {
 }
 export type PlanInfo = {
   id: string | null; name: string; status: string | null; tier: 'free' | 'premium'; lifetime: boolean
+  founding?: number | null
   until: string | null; days_left: number | null
   limits: { brokers: number; live: boolean }
   usage: { brokers: number; channels: number }
 }
-export type User = { id: string; name: string | null; email: string; role: 'admin' | 'customer'; onboarding: Onboarding; plan?: PlanInfo; beta?: boolean }
+export type User = { id: string; name: string | null; email: string; role: 'superadmin' | 'admin' | 'customer'; founding?: number | null; onboarding: Onboarding; plan?: PlanInfo; beta?: boolean }
 export type Stats = {
   days: number
   series: { day: string; signals: number; ignored: number; opened: number; pnl: number }[]

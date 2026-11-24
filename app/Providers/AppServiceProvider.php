@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Pipstream\MailSettings;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
@@ -32,5 +33,12 @@ class AppServiceProvider extends ServiceProvider
         $per('writes', 20);
         $per('installer', 10);
         $per('admin-test', 6);
+
+        // Resend key and sender from Admin → Email (encrypted in platform_settings), .env as fallback
+        try {
+            MailSettings::apply();
+        } catch (\Throwable) {
+            // no cache or database yet (image build, artisan optimize): .env mail settings stay
+        }
     }
 }

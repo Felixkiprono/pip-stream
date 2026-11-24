@@ -110,6 +110,17 @@ return [
     |
     */
 
+    // Send every email to this one address (testing before your domain is verified in Resend).
+    // Admin → Email can set it too.
+    'resend_test_to_env' => env('RESEND_TEST_TO'),
+    // .env values kept aside, so Admin → Email can fall back to them when its own are cleared
+    'env' => [
+        'mailer' => env('MAIL_MAILER', 'log'),
+        'resend_key' => env('RESEND_API_KEY'),
+        'from_address' => env('MAIL_FROM_ADDRESS', 'hello@example.com'),
+        'from_name' => env('MAIL_FROM_NAME', env('APP_NAME', 'Laravel')),
+    ],
+
     'from' => [
         'address' => env('MAIL_FROM_ADDRESS', 'hello@example.com'),
         'name' => env('MAIL_FROM_NAME', env('APP_NAME', 'Laravel')),

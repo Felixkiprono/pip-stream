@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Admin\AdminController;
+use App\Http\Controllers\Admin\MailController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\BillingController;
 use App\Http\Controllers\BrokerController;
@@ -13,9 +14,12 @@ use Illuminate\Support\Facades\Route;
 
 // ---------------------------------------------------------------- auth
 Route::get('auth/me', [AuthController::class, 'me']);
+Route::get('founding', [AuthController::class, 'founding']);
 Route::middleware('throttle:auth')->group(function () {
     Route::post('auth/register', [AuthController::class, 'register']);
     Route::post('auth/login', [AuthController::class, 'login']);
+    Route::post('auth/forgot-password', [AuthController::class, 'forgot']);
+    Route::post('auth/reset-password', [AuthController::class, 'reset']);
 });
 Route::post('auth/logout', [AuthController::class, 'logout'])->middleware('auth');
 
@@ -89,5 +93,10 @@ Route::middleware(['auth', 'active'])->group(function () {
         Route::post('users/{user}/role', [AdminController::class, 'userRole']);
         Route::post('users/{user}/trial', [AdminController::class, 'userTrial']);
         Route::get('audit', [AdminController::class, 'audit']);
+        Route::middleware('superadmin')->group(function () {
+            Route::get('mail', [MailController::class, 'show']);
+            Route::put('mail', [MailController::class, 'update']);
+            Route::post('mail/test', [MailController::class, 'test'])->middleware('throttle:admin-test');
+        });
     });
 });

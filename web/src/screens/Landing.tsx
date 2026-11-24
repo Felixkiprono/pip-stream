@@ -3,16 +3,29 @@ import {
   ArrowRight, BarChart3, BellRing, Brain, Check, ChevronDown, Cpu, Eye, Gauge, KeyRound, Landmark, Lock, MessageSquareText, OctagonX,
   QrCode, Radio, Reply, Scale, ShieldCheck, Smartphone, Sparkles, Zap,
 } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
 import { useEffect, useState, type ReactNode } from 'react'
 import { Link, Navigate } from 'react-router'
 import { BetaPill, ThemeButton } from '../components/Plan'
 import { Logo } from '../components/ui'
-import { nextStep, useSession } from '../lib/session'
+import { api } from '../lib/api'
+import { isAdmin, nextStep, useSession } from '../lib/session'
+
+/** "7 of 10 founding spots left": the first members are free for life. Hidden once they're gone. */
+function FoundingSpots() {
+  const q = useQuery({ queryKey: ['founding'], queryFn: () => api<{ slots: number; left: number }>('founding'), staleTime: 60_000 })
+  if (!q.data || q.data.left <= 0) return null
+  return (
+    <Link to="/signup" className="mt-4 inline-flex items-center gap-2 rounded-full bg-warn-soft px-3 py-1.5 text-sm font-semibold text-warn">
+      <Sparkles className="size-4" /> {q.data.left} of {q.data.slots} founding spots left: free for life, every feature
+    </Link>
+  )
+}
 
 /** pips.stream public landing page. Signed-in people go straight to their app. */
 export default function Landing() {
   const { user } = useSession()
-  if (user) return <Navigate to={user.role === 'admin' ? '/admin' : nextStep(user)} replace />
+  if (user) return <Navigate to={isAdmin(user) ? '/admin' : nextStep(user)} replace />
 
   return (
     <div className="min-h-dvh overflow-x-clip bg-bg">
@@ -104,6 +117,7 @@ function Hero() {
             </a>
           </div>
           <p className="mt-4 text-sm text-ink-3">14 days free · no card · works on any phone · in beta</p>
+          <FoundingSpots />
         </div>
         <LiveDemo />
       </div>

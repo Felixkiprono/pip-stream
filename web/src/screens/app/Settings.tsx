@@ -7,7 +7,7 @@ import { PlanCard, ThemeSwitch } from '../../components/Plan'
 import { InstallCard } from '../../components/Install'
 import { Card, Toggle } from '../../components/ui'
 import { api, post, put, settle } from '../../lib/api'
-import { useSession } from '../../lib/session'
+import { isAdmin, useSession } from '../../lib/session'
 import type { TgStatus } from '../../lib/types'
 
 type S = { name: string; email: string; alerts: { telegram: boolean; email: boolean }; bot_username: string | null }
@@ -134,7 +134,7 @@ export default function Settings() {
 
       <Card className="py-0">
         <ul className="divide-y divide-line">
-          {user?.role === 'admin' && <Row icon={<Shield className="size-5" />} title="Admin console" to="/admin" />}
+          {isAdmin(user) && <Row icon={<Shield className="size-5" />} title="Admin console" to="/admin" />}
           <li>
             <button
               className="flex w-full items-center gap-3 py-3 font-semibold text-down"

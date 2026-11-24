@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import clsx from 'clsx'
-import { Check, CircleCheck, Crown, Infinity as InfinityIcon, Minus, ShieldCheck, Smartphone, Sparkles } from 'lucide-react'
+import { Award, Check, CircleCheck, Crown, Infinity as InfinityIcon, Minus, ShieldCheck, Smartphone, Sparkles } from 'lucide-react'
 import { useState, type ReactNode } from 'react'
 import { useSearchParams } from 'react-router'
 import { Page } from '../../components/AppShell'
@@ -27,15 +27,17 @@ function CurrentPlan({ plan }: { plan: PlanInfo }) {
       <Deco className={clsx('pointer-events-none absolute -top-6 -right-6 size-40 rotate-12 opacity-15', t.accent)} />
       <div className="relative flex flex-wrap items-start gap-4">
         <span className={clsx('order-first grid size-14 shrink-0 place-items-center rounded-2xl sm:order-none', t.icon, t.accent)}>
-          {plan.lifetime ? <InfinityIcon className="size-7" /> : premium ? <Crown className="size-7 fill-current" /> : <Sparkles className="size-7" />}
+          {plan.founding ? <Award className="size-7" /> : plan.lifetime ? <InfinityIcon className="size-7" /> : premium ? <Crown className="size-7 fill-current" /> : <Sparkles className="size-7" />}
         </span>
         <div className="w-full min-w-0 sm:w-auto sm:flex-1">
           <p className={clsx('text-xs font-semibold tracking-widest uppercase', t.accent)}>Your plan</p>
           <h2 className="mt-0.5 text-2xl font-bold tracking-tight md:text-3xl">
-            {plan.lifetime ? 'Lifetime member' : premium ? plan.name : 'Free trial'}
+            {plan.founding ? `Founding member #${plan.founding}` : plan.lifetime ? 'Lifetime member' : premium ? plan.name : 'Free trial'}
           </h2>
           <p className="mt-1 text-[15px] text-white/75">
-            {plan.lifetime
+            {plan.founding
+              ? `You were one of the very first people to join PipStream. It's free for you forever, with every feature unlocked: live trading, hosted MetaTrader and up to ${plan.limits.brokers} broker accounts. Thank you.`
+              : plan.lifetime
               ? 'Free forever, with everything in Pro. Thank you for being here from the start.'
               : premium
                 ? plan.until ? `Renews on ${new Date(plan.until).toLocaleDateString(undefined, { day: 'numeric', month: 'long' })}.` : 'Active.'

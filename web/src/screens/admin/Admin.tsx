@@ -1,12 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import clsx from 'clsx'
-import { Activity, CheckCircle2, CircleAlert, CircleX, FlaskConical, Inbox, OctagonX, Play, Radio, ScrollText, Search, Send, Server, Users, Menu, X, ChevronRight, ArrowLeft, Crown } from 'lucide-react'
+import { Activity, CheckCircle2, CircleAlert, CircleX, FlaskConical, Inbox, OctagonX, Play, Radio, ScrollText, Search, Send, Server, Users, Menu, X, ChevronRight, ArrowLeft, Crown, Mail, Award } from 'lucide-react'
 import { Fragment, useEffect, useState, type ReactNode } from 'react'
 import { Link, NavLink, Outlet, useLocation, useNavigate, useParams, useSearchParams } from 'react-router'
 import { Badge, Button, Card, ErrorNote, Logo, Spinner, Toggle } from '../../components/ui'
 import { api, post, put } from '../../lib/api'
 import { ThemeSwitch } from '../../components/Plan'
 import { ago } from '../../lib/format'
+import { useSession } from '../../lib/session'
 
 const NAV = [
   { to: '/admin', label: 'Overview', icon: Activity, end: true },
@@ -16,16 +17,19 @@ const NAV = [
   { to: '/admin/users', label: 'Customers', icon: Users },
   { to: '/admin/audit', label: 'Audit log', icon: ScrollText },
   { to: '/admin/system', label: 'System', icon: Server },
+  { to: '/admin/email', label: 'Email', icon: Mail, superadmin: true },
 ]
 
 export function AdminLayout() {
   const [open, setOpen] = useState(false)
   const loc = useLocation()
   useEffect(() => setOpen(false), [loc.pathname])
-  const current = [...NAV].reverse().find((n) => (n.end ? loc.pathname === n.to : loc.pathname.startsWith(n.to)))
+  const { user } = useSession()
+  const nav = NAV.filter((n) => !('superadmin' in n) || user?.role === 'superadmin')
+  const current = [...nav].reverse().find((n) => (n.end ? loc.pathname === n.to : loc.pathname.startsWith(n.to)))
   const links = (
     <>
-      {NAV.map((n) => (
+      {nav.map((n) => (
         <NavLink
           key={n.to}
           to={n.to}
@@ -71,7 +75,7 @@ export function AdminLayout() {
   )
 }
 
-function H({ children, right }: { children: ReactNode; right?: ReactNode }) {
+export function H({ children, right }: { children: ReactNode; right?: ReactNode }) {
   return (
     <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
       <h1 className="text-2xl font-bold tracking-tight">{children}</h1>
@@ -299,16 +303,18 @@ export function AdminReview() {
 
 type AdminUserRow = {
   id: string; name: string | null; email: string; role: string; status: string; paused: boolean; plan: string | null
-  billing: string | null; channels: number; open_trades: number; telegram: boolean; joined: string
+  founding?: number | null; billing: string | null; channels: number; open_trades: number; telegram: boolean; joined: string
 }
 
-function UserBadges({ u }: { u: { role: string; status: string; paused: boolean; plan?: string | null } }) {
+function UserBadges({ u }: { u: { role: string; status: string; paused: boolean; plan?: string | null; founding?: number | null } }) {
   return (
     <>
+      {u.founding ? <Badge tone="warn"><Award className="mr-0.5 inline size-3" />founding #{u.founding}</Badge> : null}
       {(u.plan === 'lifetime' || u.plan === 'pro') && (
         <Crown className="size-4 fill-current text-warn" aria-label={u.plan === 'lifetime' ? 'Lifetime member' : 'Pro member'} />
       )}
       {u.role === 'admin' && <Badge tone="warn">admin</Badge>}
+      {u.role === 'superadmin' && <Badge tone="brand">superadmin</Badge>}
       {u.status === 'suspended' && <Badge tone="down">suspended</Badge>}
       {u.paused && <Badge tone="warn">paused</Badge>}
     </>
@@ -403,7 +409,7 @@ export function AdminUsers() {
 }
 
 type UserDetail = {
-  user: { id: string; name: string | null; email: string; role: string; status: string; paused: boolean; joined: string }
+  user: { id: string; name: string | null; email: string; role: string; founding?: number | null; status: string; paused: boolean; joined: string }
   billing: { plan: string; status: string; period_end: string | null; provider: string | null } | null
   telegram: { id: string; status: string; linked: boolean; phone_hint: string | null; last_error: string | null; since: string }[]
   channels: { id: string; title: string; username: string | null; active: boolean; mode: string | null; enabled: boolean | null; sizing_mode: string | null }[]
@@ -472,9 +478,9 @@ export function AdminUser() {
             <Button busy={act.isPending} onClick={() => run('status', { status: 'active' })}>Reactivate account</Button>
           )}
           <Button variant="soft" busy={act.isPending} onClick={() => run('trial', { days: 7 }, 'Add 7 days to this customer\'s current period?')}>+7 days trial</Button>
-          <Button variant="soft" busy={act.isPending} onClick={() => run('role', { role: u.role === 'admin' ? 'customer' : 'admin' }, u.role === 'admin' ? 'Remove admin access?' : 'Give this person full admin access?')}>
+          {u.role !== 'superadmin' && <Button variant="soft" busy={act.isPending} onClick={() => run('role', { role: u.role === 'admin' ? 'customer' : 'admin' }, u.role === 'admin' ? 'Remove admin access?' : 'Give this person full admin access?')}>
             {u.role === 'admin' ? 'Remove admin' : 'Make admin'}
-          </Button>
+          </Button>}
         </div>
         <div className="mt-2"><ErrorNote>{err}</ErrorNote></div>
       </Card>

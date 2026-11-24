@@ -3,7 +3,7 @@ import { Bell, CreditCard, Home, Landmark, List, Radio, Settings, Shield } from 
 import type { ReactNode } from 'react'
 import { NavLink, Outlet } from 'react-router'
 import { useLiveUpdates } from '../lib/live'
-import { useSession } from '../lib/session'
+import { isAdmin, useSession } from '../lib/session'
 import { BetaPill, CrownMark, PlanBadge, ThemeSwitch } from './Plan'
 import { Logo } from './ui'
 
@@ -56,7 +56,7 @@ export function AppShell({ badge }: { badge?: number }) {
           <span className="mt-4 mb-1 px-3 text-xs font-semibold tracking-wide text-ink-3 uppercase">Account</span>
           {MORE.map((t) => side(t.to, t.label, t.icon))}
           <div className="mt-auto space-y-3 pt-4">
-            {user?.role === 'admin' && side('/admin', 'Admin console', Shield)}
+            {isAdmin(user) && side('/admin', 'Admin console', Shield)}
             <div className="flex items-center gap-2 rounded-xl bg-surface-2 px-3 py-2.5">
               <span className="min-w-0 flex-1">
                 <span className="flex items-center gap-1 truncate text-sm font-semibold">{user?.name || user?.email} <CrownMark plan={user?.plan} /></span>

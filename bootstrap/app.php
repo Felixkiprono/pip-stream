@@ -1,5 +1,8 @@
 <?php
 
+use App\Http\Middleware\EnsureActive;
+use App\Http\Middleware\EnsureAdmin;
+use App\Http\Middleware\EnsureSuperadmin;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -24,7 +27,7 @@ return Application::configure(basePath: dirname(__DIR__))
         // Traefik (NanoDeploi) -> nginx -> php-fpm: trust the proxy chain for scheme and host
         $middleware->trustProxies(at: '*');
         $middleware->preventRequestForgery(except: ['webhooks/*', 'ea/*']);
-        $middleware->alias(['admin' => \App\Http\Middleware\EnsureAdmin::class, 'active' => \App\Http\Middleware\EnsureActive::class]);
+        $middleware->alias(['admin' => EnsureAdmin::class, 'superadmin' => EnsureSuperadmin::class, 'active' => EnsureActive::class]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(

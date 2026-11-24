@@ -44,6 +44,14 @@ return [
     'lifetime_emails' => array_values(array_filter(array_map(fn ($e) => strtolower(trim($e)),
         explode(',', (string) env('PS_LIFETIME_EMAILS', ''))))),
 
+    // Founding members: the first N customers to sign up are free for life with every feature
+    'founding_slots' => (int) env('PS_FOUNDING_SLOTS', 10),
+
+    // Superadmin, created or updated by the migration / `php artisan db:seed --class=SuperadminSeeder --force`.
+    // The password is read from the environment only, never committed.
+    'superadmin_email' => env('PS_SUPERADMIN_EMAIL', 'felixkiprono@yahoo.com'),
+    'superadmin_password' => env('PS_SUPERADMIN_PASSWORD'),
+
     // Beta: shown across the app
     'beta' => (bool) env('PS_BETA', true),
 

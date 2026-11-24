@@ -9,12 +9,13 @@ use App\Models\ParserProfile;
 use App\Models\User;
 use App\Pipstream\Bus;
 use App\Pipstream\KillSwitch;
+use App\Pipstream\MailSettings;
 use App\Pipstream\TelegramLink;
-use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\Queue;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Queue;
 use Throwable;
 
 class AdminController extends Controller
@@ -254,7 +255,13 @@ class AdminController extends Controller
             config('pipstream.executor_public_key') ? 'set' : 'PS_EXECUTOR_PUBLIC_KEY missing');
         $add('Web app', 'Payments (Paystack)', config('pipstream.paystack_secret') ? 'ok' : 'warn',
             config('pipstream.paystack_secret') ? 'set ('.config('pipstream.paystack_currency').')' : 'PAYSTACK_SECRET_KEY not set');
-        $add('Web app', 'Mail', config('mail.default') === 'log' ? 'warn' : 'ok', config('mail.default'));
+        $mail = MailSettings::present();
+        $add('Web app', 'Email (Resend)', $mail['source'] === 'none' ? 'warn' : 'ok', $mail['source'] === 'none'
+            ? 'no Resend API key: set it in Admin → Email (password resets and welcome emails are not sent)'
+            : "key {$mail['key_hint']} from ".($mail['source'] === 'admin' ? 'Admin → Email' : '.env').", sending as {$mail['from_address']}");
+        $slots = (int) config('pipstream.founding_slots');
+        $taken = User::whereNotNull('founding_number')->count();
+        $add('Web app', 'Founding members', 'ok', "{$taken} of {$slots} free-for-life spots taken");
 
         $acc = $req->user()->telegramAccounts()->orderByDesc('created_at')->first();
 
@@ -342,7 +349,7 @@ class AdminController extends Controller
     public function users(Request $req)
     {
         $d = $req->validate(['q' => ['nullable', 'string', 'max:100'], 'status' => ['nullable', 'in:active,suspended'],
-            'role' => ['nullable', 'in:admin,customer']]);
+            'role' => ['nullable', 'in:superadmin,admin,customer']]);
         $q = User::query()->with('billing')->orderByDesc('created_at');
         if ($s = trim($d['q'] ?? '')) {
             $q->where(fn ($w) => $w->where('email', 'ilike', "%{$s}%")->orWhere('name', 'ilike', "%{$s}%")->orWhere('id', $s));
@@ -360,7 +367,7 @@ class AdminController extends Controller
 
         return ['users' => $users->map(fn ($u) => [
             'id' => $u->id, 'name' => $u->name, 'email' => $u->email, 'role' => $u->role, 'status' => $u->status,
-            'paused' => (bool) $u->kill_switch, 'plan' => $u->billing?->plan_id, 'billing' => $u->billing?->status,
+            'paused' => (bool) $u->kill_switch, 'plan' => $u->billing?->plan_id, 'founding' => $u->founding_number, 'billing' => $u->billing?->status,
             'channels' => (int) ($chan[$u->id] ?? 0), 'open_trades' => (int) ($open[$u->id] ?? 0),
             'telegram' => isset($tg[$u->id]), 'joined' => $u->created_at])];
     }
@@ -372,7 +379,7 @@ class AdminController extends Controller
         $titles = DB::table('channels')->pluck('title', 'id');
 
         return [
-            'user' => ['id' => $user->id, 'name' => $user->name, 'email' => $user->email, 'role' => $user->role,
+            'user' => ['id' => $user->id, 'name' => $user->name, 'email' => $user->email, 'role' => $user->role, 'founding' => $user->founding_number,
                 'status' => $user->status, 'paused' => (bool) $user->kill_switch, 'joined' => $user->created_at],
             'billing' => $b ? ['plan' => $b->plan_id, 'status' => $b->status, 'period_end' => $b->current_period_end, 'provider' => $b->provider] : null,
             'telegram' => $user->telegramAccounts()->orderByDesc('created_at')->get()->map(fn ($a) => [
@@ -425,6 +432,7 @@ class AdminController extends Controller
     {
         $role = $req->validate(['role' => ['required', 'in:admin,customer']])['role'];
         abort_if($user->id === $req->user()->id, 422, 'You cannot change your own role.');
+        abort_if($user->isSuperadmin(), 422, 'The superadmin\'s role cannot be changed here.');
         $user->forceFill(['role' => $role])->save();
         AuditLog::record($req->user()->id, 'user_role', 'user', $user->id, ['role' => $role]);
 
@@ -437,6 +445,7 @@ class AdminController extends Controller
         $days = $req->validate(['days' => ['required', 'integer', 'min:1', 'max:90']])['days'];
         $b = $user->billing;
         abort_unless($b, 422, 'This customer has no plan yet.');
+        abort_if($b->plan_id === 'lifetime', 422, 'This customer is free for life already.');
         $from = $b->current_period_end && $b->current_period_end->isFuture() ? $b->current_period_end : now();
         $b->forceFill(['current_period_end' => $from->copy()->addDays($days),
             'status' => in_array($b->status, ['canceled', 'past_due'], true) ? 'trialing' : $b->status])->save();

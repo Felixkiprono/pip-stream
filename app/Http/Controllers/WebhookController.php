@@ -4,8 +4,12 @@ namespace App\Http\Controllers;
 
 use App\Models\AuditLog;
 use App\Models\BillingSubscription;
-use App\Models\Invoice;
+use App\Models\Plan;
+use App\Models\User;
+use App\Notifications\Connected;
+use App\Pipstream\Accounts;
 use App\Pipstream\Bus;
+use App\Pipstream\Ids;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -28,13 +32,16 @@ class WebhookController extends Controller
         $planId = $d['metadata']['plan_id'] ?? null;
         abort_unless($userId && $planId, 422);
         $fresh = DB::transaction(function () use ($d, $userId, $planId) {
-            $inserted = DB::table('invoices')->insertOrIgnore(['id' => \App\Pipstream\Ids::new('inv'), 'user_id' => $userId,
+            $inserted = DB::table('invoices')->insertOrIgnore(['id' => Ids::new('inv'), 'user_id' => $userId,
                 'amount_cents' => (int) $d['amount'], 'currency' => $d['currency'], 'provider' => 'paystack',
                 'provider_ref' => $d['reference'], 'status' => 'paid']);
             if (! $inserted) {
                 return false; // replayed webhook
             }
             $sub = BillingSubscription::firstOrNew(['user_id' => $userId]);
+            if ($sub->plan_id === 'lifetime') {
+                return false; // free for life already: keep the payment on record, never replace the plan
+            }
             $from = $sub->current_period_end && $sub->current_period_end->isFuture() ? $sub->current_period_end : now();
             $sub->fill(['plan_id' => $planId, 'status' => 'active', 'provider' => 'paystack',
                 'provider_ref' => $d['reference'], 'current_period_end' => $from->copy()->addDays(30)])->save();
@@ -44,6 +51,9 @@ class WebhookController extends Controller
         if ($fresh) {
             AuditLog::record('paystack', 'payment_received', 'user', $userId, ['reference' => $d['reference']]);
             $bus->publish('billing.changed', ['user_id' => $userId, 'plan_id' => $planId, 'status' => 'active']);
+            if ($u = User::find($userId)) {
+                Accounts::safely(fn () => $u->notify(new Connected('plan', Plan::find($planId)?->name)));
+            }
         }
 
         return ['ok' => true];

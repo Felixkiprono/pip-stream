@@ -21,6 +21,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
 export const useSession = () => useContext(Ctx)
 
+/** Admins and the superadmin both see the admin console. */
+export const isAdmin = (u?: User | null) => u?.role === 'admin' || u?.role === 'superadmin'
+
 /** Where a signed-in customer should land: the first unfinished onboarding step, else home. */
 export function nextStep(u: User): string {
   const s = u.onboarding.steps

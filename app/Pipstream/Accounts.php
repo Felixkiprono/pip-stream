@@ -9,7 +9,10 @@ use App\Models\Channel;
 use App\Models\CopyRule;
 use App\Models\TelegramAccount;
 use App\Models\User;
+use App\Notifications\Welcome;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Throwable;
 
 /** Customer-side actions that touch several tables, kept out of the controllers. */
 class Accounts
@@ -17,8 +20,9 @@ class Accounts
     public function __construct(private Bus $bus) {}
 
     /** Every new customer gets a free practice (paper) account and a trial, so the first
-     *  signal can be copied without risking money. */
-    public function onboard(User $user): void
+     *  signal can be copied without risking money. The first founding_slots customers become
+     *  founding members: free for life with every feature. `quiet`: no welcome email. */
+    public function onboard(User $user, bool $quiet = false): void
     {
         DB::transaction(function () use ($user) {
             BrokerAccount::create(['user_id' => $user->id, 'connector' => 'paper', 'label' => 'Practice account',
@@ -29,8 +33,70 @@ class Accounts
             DB::table('notification_prefs')->insertOrIgnore(['user_id' => $user->id, 'channel' => 'app']);
         });
         AuditLog::record('laravel', 'user_registered', 'user', $user->id);
-        if (in_array(strtolower($user->email), config('pipstream.lifetime_emails'), true)) {
+        $founding = $this->claimFoundingSpot($user);
+        if (! $founding && in_array(strtolower($user->email), config('pipstream.lifetime_emails'), true)) {
             $this->grantLifetime($user);
+        }
+        if (! $quiet) {
+            self::safely(fn () => $user->notify(new Welcome($founding)));
+        }
+    }
+
+    /** Founding members: the first `founding_slots` customers to sign up, numbered 1..N, get the
+     *  Lifetime plan. A Postgres advisory lock makes the count exact under concurrent sign-ups;
+     *  the unique founding_number column is the backstop. Returns the number, or null. */
+    public function claimFoundingSpot(User $user): ?int
+    {
+        if ($user->founding_number) {
+            return $user->founding_number;
+        }
+        if (($user->role ?? 'customer') !== 'customer') {
+            return null;
+        }
+        $slots = (int) config('pipstream.founding_slots');
+        $n = DB::transaction(function () use ($user, $slots) {
+            DB::select("select pg_advisory_xact_lock(hashtext('pipstream:founding'))");
+            $taken = (int) DB::table('users')->whereNotNull('founding_number')->count();
+            if ($taken >= $slots) {
+                return null;
+            }
+            $n = $taken + 1;
+            DB::table('users')->where('id', $user->id)->update(['founding_number' => $n]);
+
+            return $n;
+        });
+        if (! $n) {
+            return null;
+        }
+        $user->forceFill(['founding_number' => $n])->syncOriginalAttribute('founding_number');
+        AuditLog::record('laravel', 'founding_member', 'user', $user->id, ['number' => $n]);
+        $this->grantLifetime($user);
+
+        return $n;
+    }
+
+    /** Founding and Lifetime members keep their plan: nothing (a payment, a trial change) may replace it. */
+    public static function isLifetime(User $user): bool
+    {
+        return (bool) $user->founding_number || $user->billing()->where('plan_id', 'lifetime')->exists();
+    }
+
+    /** Re-applies Lifetime if a founding member's plan ever drifted (cheap check, run on /auth/me). */
+    public function ensureFounding(User $user): void
+    {
+        if ($user->founding_number && ! $user->billing()->where('plan_id', 'lifetime')->where('status', 'active')
+            ->whereNull('current_period_end')->exists()) {
+            $this->grantLifetime($user);
+        }
+    }
+
+    /** Email and the engine bus must never break sign-up, linking or a migration. */
+    public static function safely(callable $fn): void
+    {
+        try {
+            $fn();
+        } catch (Throwable $e) {
+            Log::warning('side effect failed', ['error' => $e->getMessage()]);
         }
     }
 
@@ -40,7 +106,7 @@ class Accounts
         BillingSubscription::updateOrCreate(['user_id' => $user->id],
             ['plan_id' => 'lifetime', 'status' => 'active', 'provider' => 'lifetime', 'current_period_end' => null]);
         AuditLog::record('laravel', 'lifetime_granted', 'user', $user->id);
-        $this->bus->publish('billing.changed', ['user_id' => $user->id, 'plan_id' => 'lifetime', 'status' => 'active']);
+        self::safely(fn () => $this->bus->publish('billing.changed', ['user_id' => $user->id, 'plan_id' => 'lifetime', 'status' => 'active']));
     }
 
     /** What the app shows about the customer's plan: tier, limits and usage. */
@@ -54,6 +120,7 @@ class Accounts
             'id' => $p?->id, 'name' => $p?->name ?? 'No plan', 'status' => $b?->status,
             'tier' => $premium ? 'premium' : 'free',
             'lifetime' => $p?->id === 'lifetime',
+            'founding' => $user->founding_number ? (int) $user->founding_number : null,
             'until' => $b?->current_period_end,
             'days_left' => $b?->current_period_end ? max(0, (int) ceil(now()->diffInDays($b->current_period_end, false))) : null,
             'limits' => [

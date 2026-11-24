@@ -1,6 +1,6 @@
 # PipStream
 
-Copy the Telegram trading signals you follow to your broker, automatically. Lives at **pip.stream**.
+Copy the Telegram trading signals you follow to your broker, automatically. Lives at **pips.stream**.
 
 One repository, three parts:
 

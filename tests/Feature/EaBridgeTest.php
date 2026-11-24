@@ -136,8 +136,8 @@ class EaBridgeTest extends TestCase
         $this->assertStringContainsString('#define PS_DEFAULT_URL "http://127.0.0.1:8000"', $res->getContent());
         $this->assertStringContainsString('attachment; filename="PipStream.mq5"', $res->headers->get('Content-Disposition'));
 
-        config(['pipstream.ea_url' => 'https://pip.stream/']);
-        $this->assertStringContainsString('#define PS_DEFAULT_URL "https://pip.stream"', $this->get('/ea/PipStream.mq4')->getContent());
+        config(['pipstream.ea_url' => 'https://pips.stream/']);
+        $this->assertStringContainsString('#define PS_DEFAULT_URL "https://pips.stream"', $this->get('/ea/PipStream.mq4')->getContent());
         $this->get('/ea/PipStream.ex9')->assertDontSee('PS_DEFAULT_URL');
     }
 

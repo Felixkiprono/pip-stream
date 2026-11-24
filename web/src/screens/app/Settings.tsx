@@ -152,7 +152,7 @@ export default function Settings() {
           </li>
         </ul>
       </Card>
-      <p className="pb-4 text-center text-xs text-ink-3">PipStream · pip.stream</p>
+      <p className="pb-4 text-center text-xs text-ink-3">PipStream · pips.stream</p>
     </Page>
   )
 }

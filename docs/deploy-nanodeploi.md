@@ -33,7 +33,7 @@ NanoDeploi generates the database and Redis passwords.
 
 | Field | Options | Pick |
 |---|---|---|
-| **Server** | your servers; any not connected show "(Pending)" or their status | the server for pip.stream (must show no status suffix = Connected) |
+| **Server** | your servers; any not connected show "(Pending)" or their status | the server for pips.stream (must show no status suffix = Connected) |
 
 ## Wizard step 2 · Repository
 
@@ -52,7 +52,7 @@ NanoDeploi generates the database and Redis passwords.
 |---|---|---|
 | **What are you deploying?** | `Laravel` · `PHP` · `WordPress` · `Node.js` · `Next.js / Nuxt` · `React / Vue / Vite` · `Plain HTML` · `Django` · `FastAPI / Flask` · `Rust` · `Generic (mix and match)` | **Laravel** (fills PHP 8.4, MySQL 8.0, Redis 7-alpine, Via Nginx, doc root `public`, Laravel build/release; we change several below) |
 | **App name** | text | `PipStream` |
-| **Domain** | text | `pip.stream` |
+| **Domain** | text | `pips.stream` |
 | **Doc root** | text (`public, dist, build`) | `public` (keep the Laravel default) |
 
 ## Wizard step 4 · Runtime
@@ -175,7 +175,7 @@ The `events` consumer can't be added here; add it on the site page (step 11b).
 
 ## Wizard step 9 · Review
 
-Check: Server, App `PipStream · pip.stream`, Repository `Felixkiprono/pip-stream @ main`,
+Check: Server, App `PipStream · pips.stream`, Repository `Felixkiprono/pip-stream @ main`,
 Runtime PHP, 2 build command(s) · 3 release command(s), Processes (queue worker, scheduler),
 Extra services `engine (A Dockerfile in the repository)`. Then **Create site**.
 
@@ -191,8 +191,8 @@ APP_NAME=PipStream
 APP_ENV=production
 APP_DEBUG=false
 APP_KEY=base64:…
-APP_URL=https://pip.stream
-PS_EA_URL=https://pip.stream
+APP_URL=https://pips.stream
+PS_EA_URL=https://pips.stream
 LOG_CHANNEL=stderr
 SESSION_DRIVER=redis
 SESSION_LIFETIME=43200
@@ -208,7 +208,7 @@ PS_TELEGRAM_BOT_USERNAME=…
 PS_TELEGRAM_BOT_WEBHOOK_SECRET=…
 PAYSTACK_SECRET_KEY=sk_live_…
 MAIL_MAILER=…  (+ its settings)
-MAIL_FROM_ADDRESS=alerts@pip.stream
+MAIL_FROM_ADDRESS=alerts@pips.stream
 PS_LIFETIME_EMAILS=you@example.com
 ```
 Don't add `DB_PASSWORD`, `REDIS_PASSWORD` or `PS_INGESTOR_FAKE_TELEGRAM`. With
@@ -240,15 +240,15 @@ php: php artisan pipstream:lifetime
 ```
 Telegram bot webhook (on your Mac):
 ```bash
-curl "https://api.telegram.org/bot<BOT_TOKEN>/setWebhook?url=https://pip.stream/webhooks/telegram/<WEBHOOK_SECRET>"
+curl "https://api.telegram.org/bot<BOT_TOKEN>/setWebhook?url=https://pips.stream/webhooks/telegram/<WEBHOOK_SECRET>"
 ```
-Paystack dashboard → API Keys & Webhooks → `https://pip.stream/webhooks/paystack`.
+Paystack dashboard → API Keys & Webhooks → `https://pips.stream/webhooks/paystack`.
 
 ## 13. Check
 
 ```bash
-curl -I https://pip.stream/up                                       # 200
-curl -s https://pip.stream/ea/PipStream.mq5 | grep "PipStreamUrl ="  # https://pip.stream
+curl -I https://pips.stream/up                                       # 200
+curl -s https://pips.stream/ea/PipStream.mq5 | grep "PipStreamUrl ="  # https://pips.stream
 ```
 Containers: php, pgsql, redis, node, the queue worker, the scheduler, events and engine.
 Engine log: `redis users applied`, then three `worker started`, then `telethon source connected`

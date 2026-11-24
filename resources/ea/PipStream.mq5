@@ -4,13 +4,13 @@
 //|                                                                  |
 //| Install:                                                         |
 //|  1. Tools > Options > Expert Advisors: tick "Allow WebRequest    |
-//|     for listed URL" and add  https://pip.stream                  |
+//|     for listed URL" and add  https://pips.stream                  |
 //|  2. Drag PipStream onto any one chart and press OK. It shows a   |
 //|     6-digit code: type it in PipStream > Brokers. That's it.     |
 //|  3. Turn on "Algo Trading" in the toolbar. Keep MT5 running.     |
 //+------------------------------------------------------------------+
 #property copyright "PipStream"
-#property link      "https://pip.stream"
+#property link      "https://pips.stream"
 #property version   "1.12"
 #property description "Places, updates and closes the trades from the Telegram channels you copy in PipStream."
 

@@ -9,7 +9,7 @@ import { BetaPill, ThemeButton } from '../components/Plan'
 import { Logo } from '../components/ui'
 import { nextStep, useSession } from '../lib/session'
 
-/** pip.stream public landing page. Signed-in people go straight to their app. */
+/** pips.stream public landing page. Signed-in people go straight to their app. */
 export default function Landing() {
   const { user } = useSession()
   if (user) return <Navigate to={user.role === 'admin' ? '/admin' : nextStep(user)} replace />
@@ -546,7 +546,7 @@ function Footer() {
   return (
     <footer className="border-t border-line safe-bottom">
       <div className="mx-auto flex max-w-6xl flex-col gap-3 px-5 py-8 text-sm text-ink-3 md:flex-row md:items-center md:justify-between">
-        <span className="flex items-center gap-2"><Logo size={20} /> © {new Date().getFullYear()} · pip.stream</span>
+        <span className="flex items-center gap-2"><Logo size={20} /> © {new Date().getFullYear()} · pips.stream</span>
         <span className="max-w-[60ch]">Trading involves risk of loss. PipStream copies signals you choose and does not give financial advice.</span>
       </div>
     </footer>

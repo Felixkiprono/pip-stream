@@ -97,7 +97,8 @@ return [
 
     'cipher' => 'AES-256-CBC',
 
-    'key' => env('APP_KEY'),
+    // PS_APP_KEY: for hosts that own APP_KEY in .env (NanoDeploi) and leave it empty.
+    'key' => env('APP_KEY') ?: env('PS_APP_KEY'),
 
     'previous_keys' => [
         ...array_filter(

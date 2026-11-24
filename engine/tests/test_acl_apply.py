@@ -88,3 +88,13 @@ def test_engine_main_uses_database_url(monkeypatch):
     with pytest.raises(SystemExit):
         eng.main()
     assert seen["env"]["PS_DATABASE_URL"] == "postgresql://u:p@pgsql:5432/db"
+
+
+def test_laravel_acl_template_matches_permissions():
+    """resources/redis/laravel.acl (read by `php artisan pipstream:redis-user`) must stay in sync."""
+    from pathlib import Path
+
+    from pipstream.common.permissions import acl_line
+    path = Path(__file__).resolve().parents[2] / "resources" / "redis" / "laravel.acl"
+    want = " ".join(acl_line("laravel", "__PASSWORD__").split()[2:])
+    assert path.read_text().strip() == want, "regenerate resources/redis/laravel.acl from permissions.py"

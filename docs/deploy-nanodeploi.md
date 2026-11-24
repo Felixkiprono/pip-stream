@@ -153,10 +153,15 @@ node: npm ci && npm run build
 ```
 Release:
 ```
+php: php artisan pipstream:redis-user
 php: php artisan migrate --force
 php: php artisan optimize
 php: php artisan queue:restart
 ```
+`pipstream:redis-user` creates Laravel's Redis login (`laravel`) with the site's own Redis
+password before the new version is health-checked. Without it, the web app's first deploy
+answers 500 (its session can't log in to Redis) because NanoDeploi starts the engine, which
+also creates that user, only after the new web container is healthy.
 
 ## Wizard step 8 · Processes
 

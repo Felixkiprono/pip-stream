@@ -64,3 +64,8 @@ def test_resolve_symbol():
     assert resolve_symbol("XAUUSD", {"XAUUSD": "GOLD"}, {"GOLD"}) == "GOLD"
     assert resolve_symbol("XAUUSD", {}, None) == "XAUUSD"
     assert resolve_symbol("US30", {}, {"EURUSD"}) is None
+
+
+def test_resolve_prefers_the_plain_broker_suffix():
+    from pipstream.services.risk_engine.sizing import resolve_symbol
+    assert resolve_symbol("XAUUSD", {}, {"XAUUSD247m", "XAUUSDm", "USDRUB"}) == "XAUUSDm"

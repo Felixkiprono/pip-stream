@@ -57,5 +57,7 @@ def resolve_symbol(canonical: str, symbol_map: dict, available: set[str] | None)
         return canonical
     if canonical in available:
         return canonical
-    cands = sorted(s for s in available if s.upper().startswith(canonical.upper()) and len(s) <= len(canonical) + 4)
+    # shortest suffix first: Exness lists XAUUSDm and XAUUSD247m (the 24/7 contract); take XAUUSDm
+    cands = sorted((s for s in available if s.upper().startswith(canonical.upper()) and len(s) <= len(canonical) + 4),
+                   key=lambda s: (len(s), s))
     return cands[0] if cands else None

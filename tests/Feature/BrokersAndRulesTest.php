@@ -91,4 +91,26 @@ class BrokersAndRulesTest extends TestCase
         $ch = Channel::create(['tg_chat_id' => -100778, 'title' => 'Other', 'parser_profile_id' => 'pp_default']);
         $this->actingAs($this->customer())->putJson("/api/v1/channels/{$ch->id}/rule", ['style' => 'bold'])->assertNotFound();
     }
+
+    public function test_any_plan_can_copy_into_a_demo_metatrader_account(): void
+    {
+        $u = $this->customer();
+        $ch = Channel::create(['tg_chat_id' => -100779, 'title' => 'Gold Desk', 'parser_profile_id' => 'pp_default']);
+        DB::table('subscriptions')->insert(['user_id' => $u->id, 'channel_id' => $ch->id]);
+        $b = $this->actingAs($u)->postJson('/api/v1/brokers', ['connector' => 'ea_bridge', 'platform' => 'mt4'])->json('broker.id');
+        $redis = app(\App\Pipstream\Bus::class)->redis()->client();
+        $key = config('pipstream.stream_prefix').":eares:{$b}:state";
+
+        $redis->set($key, json_encode(['demo' => false]));
+        $this->putJson("/api/v1/channels/{$ch->id}/rule", ['style' => 'fixed', 'fixed_lots' => 0.01, 'broker_account_id' => $b, 'live' => true])
+            ->assertStatus(402);
+
+        $redis->set($key, json_encode(['demo' => true]));
+        $this->putJson("/api/v1/channels/{$ch->id}/rule", ['style' => 'fixed', 'fixed_lots' => 0.01, 'broker_account_id' => $b, 'live' => true])
+            ->assertOk()->assertJsonPath('rule.mode', 'live');
+        // changing only the style keeps it live
+        $this->putJson("/api/v1/channels/{$ch->id}/rule", ['style' => 'careful', 'broker_account_id' => $b])
+            ->assertOk()->assertJsonPath('rule.mode', 'live');
+        $redis->del($key);
+    }
 }

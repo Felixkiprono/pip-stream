@@ -57,7 +57,14 @@ class EaController extends Controller
     /** Where the EA should call: PS_EA_URL, else the address the customer is using right now. */
     public static function eaUrl(Request $r): string
     {
-        return rtrim((string) (config('pipstream.ea_url') ?: $r->getSchemeAndHttpHost()), '/');
+        // A public address the customer reached us on always wins: a stale PS_EA_URL (say after a
+        // domain change) must never send installers to a host that no longer exists.
+        $host = $r->getHost();
+        $local = in_array($host, ['localhost', '127.0.0.1', '::1'], true) || filter_var($host, FILTER_VALIDATE_IP)
+            || str_ends_with($host, '.local') || str_ends_with($host, '.test');
+        $configured = (string) config('pipstream.ea_url');
+
+        return rtrim($configured !== '' && $local ? $configured : $r->getSchemeAndHttpHost(), '/');
     }
 
     /** The EA source with the server address preset, so the customer never has to type it. */

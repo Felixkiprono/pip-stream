@@ -81,12 +81,16 @@ class ChannelController extends Controller
         $broker = $data['broker_account_id'] ?? null
             ? $u->brokerAccounts()->findOrFail($data['broker_account_id'])
             : $u->brokerAccounts()->where('connector', 'paper')->firstOrFail();
-        $live = ($data['live'] ?? false) && $broker->connector !== 'paper';
-        if ($live) {
-            $billing = $u->billing()->with('plan')->first();   // fresh: never trust a cached plan for live money
-            abort_unless($billing?->plan?->allow_live && $billing->isEntitled(), 402, 'Live copying needs the Pro plan.');
-        }
         $rule = CopyRule::firstOrNew(['user_id' => $u->id, 'channel_id' => $channel->id]);
+        // Changing only the style (no "live" sent) keeps a rule that already copies to this broker live.
+        $wantLive = array_key_exists('live', $data)
+            ? (bool) $data['live']
+            : $rule->exists && $rule->mode === 'live' && $rule->broker_account_id === $broker->id;
+        $live = $wantLive && $broker->connector !== 'paper';
+        if ($live && ! $this->isDemo($broker)) {
+            $billing = $u->billing()->with('plan')->first();   // fresh: never trust a cached plan for live money
+            abort_unless($billing?->plan?->allow_live && $billing->isEntitled(), 402, 'Copying into a real-money account needs the Pro plan.');
+        }
         $rule->fill(Presets::apply($data['style'], $data) + [
             'broker_account_id' => $broker->id, 'enabled' => $data['enabled'] ?? true,
             'mode' => $broker->connector === 'paper' ? 'paper' : ($live ? 'live' : 'shadow'),
@@ -94,5 +98,18 @@ class ChannelController extends Controller
         $bus->publish('config.changed', ['entity' => 'copy_rule', 'entity_id' => $rule->id]);
 
         return ['rule' => $this->rule_out($rule->fresh())];
+    }
+
+    /** Demo broker accounts (as the terminal itself reports) can be copied into on any plan. */
+    private function isDemo(\App\Models\BrokerAccount $b): bool
+    {
+        if ($b->connector !== 'ea_bridge') {
+            return false;
+        }
+        $p = config('pipstream.stream_prefix', 'ps');
+        $raw = rescue(fn () => app(\App\Pipstream\Bus::class)->redis()->client()->get("{$p}:eares:{$b->id}:state"), null, false);
+        $state = is_string($raw) ? json_decode($raw, true) : null;
+
+        return is_array($state) && ($state['demo'] ?? false) === true;
     }
 }

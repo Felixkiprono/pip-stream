@@ -27,3 +27,24 @@ def test_each_worker_gets_only_its_own_secrets():
     assert intake["PS_REDIS_URL"] == "redis://intake:pi@redis:6379/0"
     assert risk["PS_REDIS_URL"] == "redis://risk:pr@redis:6379/0"
     assert ex["PS_REDIS_URL"] == "redis://executor:pe@redis:6379/0"
+
+
+def test_redis_login_falls_back_to_the_hosts_own():
+    from pipstream.apps.engine import worker_redis_url
+    host = {"REDIS_HOST": "redis", "REDIS_PORT": "6379", "REDIS_PASSWORD": "p/w"}
+    # nothing PipStream-specific: the platform's login (NanoDeploi shares REDIS_HOST/PASSWORD)
+    assert worker_redis_url("risk", host) == "redis://:p%2Fw@redis:6379/0"
+    # a half-filled PS_REDIS_URL ("redis") is ignored instead of breaking the login
+    assert worker_redis_url("risk", {**host, "PS_REDIS_URL": "redis"}) == "redis://:p%2Fw@redis:6379/0"
+    assert worker_redis_url("risk", {**host, "REDIS_URL": "redis://:x@r:1/0"}) == "redis://:x@r:1/0"
+    # per-worker ACL users win, on the host's Redis when PS_REDIS_HOST is not set
+    assert worker_redis_url("risk", {**host, "PS_REDIS_PASSWORD_RISK": "rk"}) == "redis://risk:rk@redis:6379/0"
+    # local dev: one open Redis
+    assert worker_redis_url("risk", {"PS_REDIS_URL": "redis://127.0.0.1:56379/0"}) == "redis://127.0.0.1:56379/0"
+
+
+def test_acl_admin_login_comes_from_redis_host_and_password():
+    from pipstream.common.permissions import admin_url_from_env
+    env = {"PS_REDIS_APPLY_ACL": "1", "REDIS_HOST": "redis", "REDIS_PASSWORD": "pw"}
+    assert admin_url_from_env(env) == "redis://:pw@redis:6379/0"
+    assert admin_url_from_env({"REDIS_HOST": "redis", "REDIS_PASSWORD": "pw"}) is None

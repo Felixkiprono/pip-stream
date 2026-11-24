@@ -52,13 +52,30 @@ def child_env(worker: str, env: dict[str, str]) -> dict[str, str]:
             continue
         if any(k.startswith(p) for p in SHARED) or any(k.startswith(p) for p in OWN[worker]):
             out[k] = v
-    if "PS_REDIS_URL" in env and not env.get("PS_REDIS_HOST"):
-        out["PS_REDIS_URL"] = env["PS_REDIS_URL"]  # dev: one unauthenticated Redis
-    else:
-        host, port = env.get("PS_REDIS_HOST", "redis"), env.get("PS_REDIS_PORT", "6379")
-        pw = env.get(f"PS_REDIS_PASSWORD_{worker.upper()}", "")
-        out["PS_REDIS_URL"] = f"redis://{worker}:{pw}@{host}:{port}/0" if pw else f"redis://{host}:{port}/0"
+    out["PS_REDIS_URL"] = worker_redis_url(worker, env)
     return out
+
+
+def worker_redis_url(worker: str, env: dict[str, str]) -> str:
+    """Which Redis login a worker uses, most specific first:
+    1. its own ACL user (PS_REDIS_PASSWORD_<WORKER>) on PS_REDIS_HOST, or on the host's Redis
+    2. an explicit PS_REDIS_URL
+    3. the hosting platform's login (REDIS_URL, or REDIS_HOST + REDIS_PASSWORD)
+    4. an unauthenticated Redis on PS_REDIS_HOST (local dev)"""
+    from urllib.parse import urlsplit
+    from ..common.permissions import host_redis_url
+    hosted = host_redis_url(env)
+    pw = env.get(f"PS_REDIS_PASSWORD_{worker.upper()}", "")
+    if pw and (env.get("PS_REDIS_HOST") or hosted):
+        h = urlsplit(hosted) if hosted and not env.get("PS_REDIS_HOST") else None
+        host = env.get("PS_REDIS_HOST") or (h.hostname if h else "redis")
+        port = env.get("PS_REDIS_PORT") or (str(h.port) if h and h.port else "6379")
+        return f"redis://{worker}:{pw}@{host}:{port}/0"
+    if "://" in env.get("PS_REDIS_URL", ""):
+        return env["PS_REDIS_URL"]
+    if hosted:
+        return hosted
+    return f"redis://{env.get('PS_REDIS_HOST', 'redis')}:{env.get('PS_REDIS_PORT', '6379')}/0"
 
 
 def log(msg: str, **kw) -> None:

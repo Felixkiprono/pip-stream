@@ -124,12 +124,25 @@ def apply_acl(admin_url: str, env: dict[str, str] | None = None, prefix: str = "
     return done
 
 
+def host_redis_url(env: dict[str, str]) -> str | None:
+    """The hosting platform's own Redis login: REDIS_URL, or REDIS_HOST/PORT/PASSWORD (NanoDeploi
+    shares the latter with extra services)."""
+    if "://" in env.get("REDIS_URL", ""):
+        return env["REDIS_URL"]
+    if env.get("REDIS_HOST"):
+        from urllib.parse import quote
+        pw = env.get("REDIS_PASSWORD", "")
+        auth = f":{quote(pw, safe='')}@" if pw else ""
+        return f"redis://{auth}{env['REDIS_HOST']}:{env.get('REDIS_PORT', '6379')}/0"
+    return None
+
+
 def admin_url_from_env(env: dict[str, str]) -> str | None:
-    """PS_REDIS_ADMIN_URL, or the host's own REDIS_URL when PS_REDIS_APPLY_ACL is on."""
+    """PS_REDIS_ADMIN_URL, or the host's own Redis login when PS_REDIS_APPLY_ACL is on."""
     if env.get("PS_REDIS_ADMIN_URL"):
         return env["PS_REDIS_ADMIN_URL"]
-    if env.get("PS_REDIS_APPLY_ACL", "").lower() in ("1", "true", "yes", "on") and env.get("REDIS_URL"):
-        return env["REDIS_URL"]
+    if env.get("PS_REDIS_APPLY_ACL", "").lower() in ("1", "true", "yes", "on"):
+        return host_redis_url(env)
     return None
 
 

@@ -64,6 +64,12 @@ export type Position = {
   id: string; ticket: string; symbol: string; side: 'buy' | 'sell'; volume: number; open_price: number
   sl: number | null; tp: number | null; tp_index: number | null; channel: string | null; opened_at: string; profit: number | null
   status?: 'open' | 'closed'; close_price?: number | null; closed_at?: string | null
+  account?: TradeAccount; latency_ms?: number | null; filled_at?: string | null
+}
+export type TradeAccount = { label: string | null; practice: boolean }
+export type FailedOrder = {
+  id: string; action: string; status: 'failed' | 'rejected'; symbol: string | null; side: string | null; volume: number | null
+  error: string | null; latency_ms: number | null; created_at: string; account: TradeAccount
 }
 export type SignalRow = { id: string; channel: string | null; kind: string; symbol: string; side: string | null; at: string; summary: string }
 export type Home = {

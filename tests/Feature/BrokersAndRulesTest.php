@@ -113,4 +113,26 @@ class BrokersAndRulesTest extends TestCase
             ->assertOk()->assertJsonPath('rule.mode', 'live');
         $redis->del($key);
     }
+
+    public function test_trades_show_account_fill_time_speed_and_refusals(): void
+    {
+        $u = $this->customer();
+        $b = $this->actingAs($u)->postJson('/api/v1/brokers', ['connector' => 'ea_bridge', 'platform' => 'mt4'])->json('broker.id');
+        $practice = BrokerAccount::where('user_id', $u->id)->where('connector', 'paper')->value('id');
+        foreach ([[$b, '409849834'], [$practice, '1']] as $i => [$acct, $ticket]) {
+            DB::table('positions')->insert(['id' => "pos{$i}", 'user_id' => $u->id, 'broker_account_id' => $acct, 'channel_id' => 'c',
+                'source_message_id' => 1, 'signal_id' => 's', 'ticket' => $ticket, 'symbol' => 'XAUUSDm', 'side' => 'buy', 'volume' => 0.01]);
+            DB::table('orders')->insert(['id' => "o{$i}", 'intent_id' => "i{$i}", 'user_id' => $u->id, 'broker_account_id' => $acct,
+                'action' => 'open', 'status' => 'executed', 'ticket' => $ticket, 'latency_ms' => 640]);
+        }
+        DB::table('orders')->insert(['id' => 'of', 'intent_id' => 'if', 'user_id' => $u->id, 'broker_account_id' => $b,
+            'action' => 'open', 'status' => 'failed', 'symbol' => 'XAUUSDm', 'error' => 'market closed', 'latency_ms' => 900]);
+
+        $t = collect($this->getJson('/api/v1/trades')->assertOk()->json('trades'))->keyBy('ticket');
+        $this->assertFalse($t['409849834']['account']['practice']);
+        $this->assertSame(640, $t['409849834']['latency_ms']);
+        $this->assertNotNull($t['409849834']['filled_at']);
+        $this->assertTrue($t['1']['account']['practice']);
+        $this->getJson('/api/v1/trades')->assertJsonPath('failed.0.error', 'market closed');
+    }
 }

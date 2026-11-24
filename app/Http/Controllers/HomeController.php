@@ -153,13 +153,30 @@ class HomeController extends Controller
     {
         $u = $r->user();
         $chanTitles = DB::table('channels')->pluck('title', 'id');
+        $accounts = DB::table('broker_accounts')->where('user_id', $u->id)->get(['id', 'label', 'connector'])->keyBy('id');
         $pos = Position::where('user_id', $u->id)->orderByDesc('opened_at')->paginate(30);
+        $items = collect($pos->items());
+        // what the terminal answered when it opened each trade: fill time and speed
+        $opens = DB::table('orders')->where('user_id', $u->id)->where('action', 'open')->where('status', 'executed')
+            ->whereIn('ticket', $items->pluck('ticket'))->get(['broker_account_id', 'ticket', 'latency_ms', 'created_at'])
+            ->keyBy(fn ($o) => $o->broker_account_id.'|'.$o->ticket);
+        $account = fn ($id) => ['label' => $accounts[$id]->label ?? null, 'practice' => ($accounts[$id]->connector ?? '') === 'paper'];
 
-        return ['trades' => collect($pos->items())->map(fn ($p) => [
-            'id' => $p->id, 'ticket' => $p->ticket, 'symbol' => $p->symbol, 'side' => $p->side, 'volume' => $p->volume,
-            'open_price' => $p->open_price, 'close_price' => $p->close_price, 'sl' => $p->sl, 'tp' => $p->tp,
-            'status' => $p->status, 'profit' => $p->profit, 'channel' => $chanTitles[$p->channel_id] ?? null,
-            'opened_at' => $p->opened_at, 'closed_at' => $p->closed_at]), 'next' => $pos->hasMorePages() ? $pos->currentPage() + 1 : null];
+        return ['trades' => $items->map(function ($p) use ($chanTitles, $opens, $account) {
+            $o = $opens[$p->broker_account_id.'|'.$p->ticket] ?? null;
+
+            return [
+                'id' => $p->id, 'ticket' => $p->ticket, 'symbol' => $p->symbol, 'side' => $p->side, 'volume' => $p->volume,
+                'open_price' => $p->open_price, 'close_price' => $p->close_price, 'sl' => $p->sl, 'tp' => $p->tp,
+                'status' => $p->status, 'profit' => $p->profit, 'channel' => $chanTitles[$p->channel_id] ?? null,
+                'opened_at' => $p->opened_at, 'closed_at' => $p->closed_at, 'account' => $account($p->broker_account_id),
+                'latency_ms' => $o->latency_ms ?? null, 'filled_at' => $o->created_at ?? null];
+        }),
+            // orders the broker or terminal refused, with its answer
+            'failed' => DB::table('orders')->where('user_id', $u->id)->whereIn('status', ['failed', 'rejected'])
+                ->orderByDesc('created_at')->limit(30)->get(['id', 'action', 'status', 'symbol', 'side', 'volume', 'error', 'latency_ms', 'created_at', 'broker_account_id'])
+                ->map(fn ($o) => (array) $o + ['account' => $account($o->broker_account_id)]),
+            'next' => $pos->hasMorePages() ? $pos->currentPage() + 1 : null];
     }
 
     public function alerts(Request $r)

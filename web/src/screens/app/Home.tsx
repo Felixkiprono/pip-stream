@@ -9,9 +9,30 @@ import { BetaPill, CrownMark, PlanCard, ThemeButton } from '../../components/Pla
 import { Insights } from './Insights'
 import { Avatar, Badge, Card, Logo, Spinner } from '../../components/ui'
 import { api, post } from '../../lib/api'
-import { ago, money, price } from '../../lib/format'
+import { ago, money, price, toDate } from '../../lib/format'
 import { useSession } from '../../lib/session'
 import type { Home as HomeT, Position } from '../../lib/types'
+
+/** When it filled, where, the broker's ticket and how fast the terminal answered. */
+function TradeMeta({ p }: { p: Position }) {
+  const at = p.filled_at ?? p.opened_at
+  return (
+    <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-ink-3 tabular">
+      {p.account?.practice ? <Badge>Practice</Badge> : <Badge tone="brand">{p.account?.label ?? 'Broker'}</Badge>}
+      <span>{stamp(at)}</span>
+      {!p.account?.practice && <span>#{p.ticket}</span>}
+      {p.latency_ms != null && <span>{p.latency_ms < 1000 ? `${p.latency_ms} ms` : `${(p.latency_ms / 1000).toFixed(1)} s`} from post</span>}
+      {p.status === 'closed' && p.closed_at && <span>closed {stamp(p.closed_at)}{p.close_price != null && ` @ ${price(p.close_price)}`}</span>}
+    </span>
+  )
+}
+
+export function stamp(iso: string): string {
+  const d = toDate(iso)
+  const today = new Date().toDateString() === d.toDateString()
+  const time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+  return today ? time : `${d.toLocaleDateString([], { day: 'numeric', month: 'short' })} ${time}`
+}
 
 export function PositionRow({ p }: { p: Position }) {
   const buy = p.side === 'buy'
@@ -32,6 +53,7 @@ export function PositionRow({ p }: { p: Position }) {
           {p.sl != null && ` · SL ${price(p.sl)}`}
           {p.tp != null && ` · TP ${price(p.tp)}`}
         </span>
+        {p.account && <TradeMeta p={p} />}
       </span>
       <span className="text-right">
         <span className={clsx('block font-semibold tabular', (p.profit ?? 0) >= 0 ? 'text-up' : 'text-down')}>{p.profit == null ? '—' : money(p.profit, '')}</span>

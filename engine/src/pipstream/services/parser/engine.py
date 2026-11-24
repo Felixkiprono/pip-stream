@@ -161,7 +161,7 @@ class SignalParser:
         sides = self._find_sides(norm, profile)
         has_num = bool(re.search(r"\d", norm))
         followup_word = bool(_FOLLOW_BE.search(norm) or _FOLLOW_CLOSE.search(norm)
-                             or _FOLLOW_PARTIAL.search(norm) or _FOLLOW_NEW_SL.search(norm))
+                             or _FOLLOW_PARTIAL.search(norm) or _FOLLOW_NEW_SL.search(norm) or _FOLLOW_NEW_TP.search(norm))
 
         # fast prefilter: needs (direction + number) or a follow-up phrase
         if not ((sides and has_num) or followup_word or (_OPTIONS_DIR.search(norm) and has_num)):

@@ -67,6 +67,7 @@ def test_followups_need_reply_anchor():
     assert parse("close 30%", reply=99).signal.close_fraction == pytest.approx(0.3)
     assert parse("Close all trades", reply=99).signal.close_fraction == 1.0
     assert parse("move sl to 2345", reply=99).signal.new_sl == 2345
+    assert parse("New TP 3590", reply=99).signal.new_tp == 3590
     assert parse("Close all trades").signal is None  # no reply -> not trusted by default
     lenient = ParserProfile(followups_without_reply=True)
     assert parse("Close all trades", profile=lenient).signal.kind == "close"

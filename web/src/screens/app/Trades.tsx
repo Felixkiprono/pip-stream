@@ -1,10 +1,10 @@
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import clsx from 'clsx'
 import { TriangleAlert } from 'lucide-react'
 import { useState } from 'react'
 import { Page } from '../../components/AppShell'
-import { Badge, Card, Spinner } from '../../components/ui'
-import { api } from '../../lib/api'
+import { Badge, Button, Card, ErrorNote, Spinner } from '../../components/ui'
+import { api, post } from '../../lib/api'
 import type { FailedOrder, Position } from '../../lib/types'
 import { PositionRow, stamp } from './Home'
 
@@ -34,7 +34,39 @@ function FailedRow({ o }: { o: FailedOrder }) {
   )
 }
 
+function CloseButton({ p, onDone }: { p: Position; onDone: (err?: string) => void }) {
+  const [busy, setBusy] = useState(false)
+  return (
+    <Button
+      variant="danger"
+      busy={busy}
+      className="min-h-10 shrink-0 px-3 text-sm"
+      onClick={async () => {
+        setBusy(true)
+        try {
+          await post(`trades/${p.id}/close`)
+          onDone()
+        } catch (e) {
+          onDone((e as Error).message)
+        } finally {
+          setBusy(false)
+        }
+      }}
+    >
+      Close
+    </Button>
+  )
+}
+
 export default function Trades() {
+  const qc = useQueryClient()
+  const [err, setErr] = useState('')
+  const [closingAll, setClosingAll] = useState(false)
+  const done = (e?: string) => {
+    setErr(e ?? '')
+    qc.invalidateQueries({ queryKey: ['trades'] })
+    qc.invalidateQueries({ queryKey: ['home'] })
+  }
   const [tab, setTab] = useState<keyof typeof TABS>('open')
   const q = useQuery({
     queryKey: ['trades'],
@@ -43,6 +75,7 @@ export default function Trades() {
   })
   const rows = (q.data?.trades ?? []).filter((t) => t.status === tab)
   const failed = q.data?.failed ?? []
+  const practiceOpen = (q.data?.trades ?? []).filter((t) => t.status === 'open' && t.account?.practice).length
   return (
     <Page title="Trades">
       <div className="grid grid-cols-3 rounded-2xl bg-surface-2 p-1">
@@ -52,6 +85,27 @@ export default function Trades() {
           </button>
         ))}
       </div>
+      <ErrorNote>{err}</ErrorNote>
+      {tab === 'open' && practiceOpen > 1 && (
+        <Button
+          variant="soft"
+          block
+          busy={closingAll}
+          onClick={async () => {
+            setClosingAll(true)
+            try {
+              await post('trades/close-practice')
+              done()
+            } catch (e) {
+              done((e as Error).message)
+            } finally {
+              setClosingAll(false)
+            }
+          }}
+        >
+          Close all {practiceOpen} practice trades
+        </Button>
+      )}
       {q.isLoading ? (
         <Spinner />
       ) : (
@@ -63,7 +117,9 @@ export default function Trades() {
               <p className="py-8 text-center text-ink-3">Every trade copied so far.</p>
             )
           ) : rows.length ? (
-            <ul className="divide-y divide-line">{rows.map((p) => <PositionRow key={p.id} p={p} />)}</ul>
+            <ul className="divide-y divide-line">{rows.map((p) => (
+                <PositionRow key={p.id} p={p} action={p.status === 'open' && p.account?.practice ? <CloseButton p={p} onDone={done} /> : undefined} />
+              ))}</ul>
           ) : (
             <p className="py-8 text-center text-ink-3">No {tab} trades yet.</p>
           )}

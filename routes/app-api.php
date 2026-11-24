@@ -33,6 +33,8 @@ Route::middleware(['auth', 'active'])->group(function () {
     Route::post('alerts/read', [HomeController::class, 'markRead']);
     Route::get('alerts/{id}', [DetailController::class, 'alert']);
     Route::get('trades/{position}', [DetailController::class, 'position']);
+    Route::post('trades/close-practice', [HomeController::class, 'closeAllPractice'])->middleware('throttle:writes');
+    Route::post('trades/{position}/close', [HomeController::class, 'closePractice'])->middleware('throttle:writes');
     Route::get('signals/{signal}', [DetailController::class, 'signal']);
     Route::post('pause', [HomeController::class, 'pause']);
 

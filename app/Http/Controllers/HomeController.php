@@ -179,6 +179,69 @@ class HomeController extends Controller
             'next' => $pos->hasMorePages() ? $pos->currentPage() + 1 : null];
     }
 
+    /** Close a practice (paper) trade by hand: at the cached quote, else at its entry price. */
+    public function closePractice(Request $r, string $position)
+    {
+        $p = Position::where('id', $position)->where('user_id', $r->user()->id)->first();
+        abort_unless($p, 404);
+        abort_unless($p->status === 'open', 422, 'This trade is already closed.');
+        $paper = DB::table('broker_accounts')->where('id', $p->broker_account_id)->value('connector') === 'paper';
+        abort_unless($paper, 422, 'Only practice trades can be closed here. Close real trades in MetaTrader.');
+
+        return ['trade' => $this->closePaper($p)];
+    }
+
+    /** Close every open practice trade (clears out stale test trades). */
+    public function closeAllPractice(Request $r)
+    {
+        $ids = DB::table('broker_accounts')->where('user_id', $r->user()->id)->where('connector', 'paper')->pluck('id');
+        $open = Position::where('user_id', $r->user()->id)->where('status', 'open')->whereIn('broker_account_id', $ids)->get();
+
+        return ['closed' => $open->map(fn ($p) => $this->closePaper($p))->values()];
+    }
+
+    private function closePaper(Position $p): array
+    {
+        $prefix = config('pipstream.stream_prefix', 'ps');
+        $redis = rescue(fn () => app(\App\Pipstream\Bus::class)->redis()->client(), null, false);
+        $quote = $redis ? rescue(fn () => $redis->get("{$prefix}:quote:{$p->symbol}"), null, false) : null;
+        $px = is_numeric($quote) ? (float) $quote : (float) $p->open_price;
+        $sign = $p->side === 'sell' ? -1 : 1;
+        $profit = round(($px - (float) $p->open_price) * $sign * (float) $p->volume * self::contractSize($p->symbol), 2);
+        if ($redis) {   // drop the simulated position so the engine stops tracking it
+            rescue(function () use ($redis, $prefix, $p, $profit) {
+                $redis->hdel("{$prefix}:paper:{$p->broker_account_id}:positions", $p->ticket);
+                $redis->incrbyfloat("{$prefix}:paper:{$p->broker_account_id}:balance", $profit);
+            }, null, false);
+        }
+        $p->forceFill(['status' => 'closed', 'closed_at' => now(), 'close_price' => $px,
+            'profit' => round((float) $p->profit + $profit, 2)])->save();
+
+        return ['id' => $p->id, 'ticket' => $p->ticket, 'close_price' => $px, 'profit' => $p->profit];
+    }
+
+    private static function contractSize(string $symbol): float
+    {
+        static $sizes = null;
+        if ($sizes === null) {
+            $sizes = [];
+            $file = env('PS_SYMBOLS_FILE') ?: base_path('engine/src/pipstream/services/parser/default_symbols.yaml');
+            foreach (@file($file) ?: [] as $line) {
+                if (preg_match('/^\s+([A-Z0-9]+):\s*\{.*contract_size:\s*([0-9.]+)/', $line, $m)) {
+                    $sizes[$m[1]] = (float) $m[2];
+                }
+            }
+        }
+        $s = strtoupper($symbol);
+        foreach ($sizes as $canon => $size) {   // broker names add suffixes: XAUUSDm, EURUSD.pro
+            if ($s === $canon || str_starts_with($s, $canon)) {
+                return $size;
+            }
+        }
+
+        return 1.0;
+    }
+
     public function alerts(Request $r)
     {
         return ['alerts' => $r->user()->notifications()->limit(50)->get()->map(fn ($n) => $n->data + [

@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import clsx from 'clsx'
 import { ArrowDownRight, ArrowUpRight, ChevronRight, FlaskConical, Pause, Play, Radio, TriangleAlert, X } from 'lucide-react'
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { Link } from 'react-router'
 import { Section } from '../../components/AppShell'
 import { InstallCard } from '../../components/Install'
@@ -34,11 +34,11 @@ export function stamp(iso: string): string {
   return today ? time : `${d.toLocaleDateString([], { day: 'numeric', month: 'short' })} ${time}`
 }
 
-export function PositionRow({ p }: { p: Position }) {
+export function PositionRow({ p, action }: { p: Position; action?: ReactNode }) {
   const buy = p.side === 'buy'
   return (
-    <li>
-      <Link to={`/app/trades/${p.id}`} className="-mx-2 flex items-center gap-3 rounded-2xl px-2 py-3 hover:bg-surface-2 active:bg-surface-2">
+    <li className="flex items-center gap-2">
+      <Link to={`/app/trades/${p.id}`} className="-mx-2 flex min-w-0 flex-1 items-center gap-3 rounded-2xl px-2 py-3 hover:bg-surface-2 active:bg-surface-2">
       <span className={clsx('grid size-10 shrink-0 place-items-center rounded-2xl', buy ? 'bg-up-soft text-up' : 'bg-down-soft text-down')}>
         {buy ? <ArrowUpRight className="size-5" /> : <ArrowDownRight className="size-5" />}
       </span>
@@ -60,6 +60,7 @@ export function PositionRow({ p }: { p: Position }) {
         <span className="block text-xs text-ink-3">{p.channel}</span>
       </span>
       </Link>
+      {action}
     </li>
   )
 }

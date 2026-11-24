@@ -135,4 +135,30 @@ class BrokersAndRulesTest extends TestCase
         $this->assertTrue($t['1']['account']['practice']);
         $this->getJson('/api/v1/trades')->assertJsonPath('failed.0.error', 'market closed');
     }
+
+    public function test_practice_trades_can_be_closed_by_hand_but_real_ones_cannot(): void
+    {
+        $u = $this->customer();
+        $b = $this->actingAs($u)->postJson('/api/v1/brokers', ['connector' => 'ea_bridge', 'platform' => 'mt4'])->json('broker.id');
+        $practice = BrokerAccount::where('user_id', $u->id)->where('connector', 'paper')->value('id');
+        foreach ([['p1', $practice, '7', 0.04], ['p2', $practice, '8', 0.06], ['r1', $b, '409849834', 0.01]] as [$id, $acct, $ticket, $vol]) {
+            DB::table('positions')->insert(['id' => $id, 'user_id' => $u->id, 'broker_account_id' => $acct, 'channel_id' => 'c',
+                'source_message_id' => 1, 'signal_id' => 's', 'ticket' => $ticket, 'symbol' => 'XAUUSD', 'side' => 'buy',
+                'volume' => $vol, 'open_price' => 3550, 'status' => 'open']);
+        }
+        $redis = app(\App\Pipstream\Bus::class)->redis()->client();
+        $p = config('pipstream.stream_prefix');
+        $redis->hset("{$p}:paper:{$practice}:positions", '7', '{}');
+        $redis->set("{$p}:quote:XAUUSD", '3552');
+
+        $this->postJson('/api/v1/trades/p1/close')->assertOk()->assertJsonPath('trade.profit', 8);   // 2 x 0.04 lot x 100 oz
+        $this->assertFalse((bool) $redis->hexists("{$p}:paper:{$practice}:positions", '7'));
+        $this->postJson('/api/v1/trades/p1/close')->assertStatus(422);
+        $this->postJson('/api/v1/trades/r1/close')->assertStatus(422);
+
+        $this->postJson('/api/v1/trades/close-practice')->assertOk()->assertJsonCount(1, 'closed');
+        $this->assertSame('closed', DB::table('positions')->where('id', 'p2')->value('status'));
+        $this->assertSame('open', DB::table('positions')->where('id', 'r1')->value('status'));
+        $redis->del("{$p}:quote:XAUUSD", "{$p}:paper:{$practice}:positions");
+    }
 }

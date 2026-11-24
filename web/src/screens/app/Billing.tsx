@@ -17,24 +17,24 @@ function CurrentPlan({ plan }: { plan: PlanInfo }) {
   const premium = plan.tier === 'premium'
   const trialTotal = 14
   const used = plan.days_left != null ? Math.min(100, Math.round((100 * (trialTotal - plan.days_left)) / trialTotal)) : 0
+  // Same card for both: gold for Pro/Lifetime, green for the free trial.
+  const t = premium
+    ? { bg: 'bg-[linear-gradient(135deg,#1a1205,#3a2608_55%,#6b4a10)]', accent: 'text-[#f5c542]', icon: 'bg-[#f5c542]/20', badge: 'bg-[#f5c542] text-[#2a1d05]', bar: 'bg-[#f5c542]' }
+    : { bg: 'bg-[linear-gradient(135deg,#04140c,#0a2e1c_55%,#11613a)]', accent: 'text-[#34d399]', icon: 'bg-[#34d399]/20', badge: 'bg-[#34d399] text-[#042014]', bar: 'bg-[#34d399]' }
+  const Deco = premium ? Crown : Sparkles
   return (
-    <section
-      className={clsx(
-        'relative overflow-hidden rounded-[28px] p-5 md:p-7',
-        premium ? 'bg-[linear-gradient(135deg,#1a1205,#3a2608_55%,#6b4a10)] text-white' : 'border border-line bg-surface',
-      )}
-    >
-      {premium && <Crown className="pointer-events-none absolute -top-6 -right-6 size-40 rotate-12 text-[#f5c542] opacity-15" />}
+    <section className={clsx('relative overflow-hidden rounded-[28px] p-5 text-white md:p-7', t.bg)}>
+      <Deco className={clsx('pointer-events-none absolute -top-6 -right-6 size-40 rotate-12 opacity-15', t.accent)} />
       <div className="relative flex flex-wrap items-start gap-4">
-        <span className={clsx('order-first grid size-14 shrink-0 place-items-center rounded-2xl sm:order-none', premium ? 'bg-[#f5c542]/20 text-[#f5c542]' : 'bg-surface-2 text-ink-3')}>
+        <span className={clsx('order-first grid size-14 shrink-0 place-items-center rounded-2xl sm:order-none', t.icon, t.accent)}>
           {plan.lifetime ? <InfinityIcon className="size-7" /> : premium ? <Crown className="size-7 fill-current" /> : <Sparkles className="size-7" />}
         </span>
         <div className="w-full min-w-0 sm:w-auto sm:flex-1">
-          <p className={clsx('text-xs font-semibold tracking-widest uppercase', premium ? 'text-[#f5c542]' : 'text-ink-3')}>Your plan</p>
+          <p className={clsx('text-xs font-semibold tracking-widest uppercase', t.accent)}>Your plan</p>
           <h2 className="mt-0.5 text-2xl font-bold tracking-tight md:text-3xl">
             {plan.lifetime ? 'Lifetime member' : premium ? plan.name : 'Free trial'}
           </h2>
-          <p className={clsx('mt-1 text-[15px]', premium ? 'text-white/75' : 'text-ink-2')}>
+          <p className="mt-1 text-[15px] text-white/75">
             {plan.lifetime
               ? 'Free forever, with everything in Pro. Thank you for being here from the start.'
               : premium
@@ -44,25 +44,25 @@ function CurrentPlan({ plan }: { plan: PlanInfo }) {
                   : 'Copy every signal to practice money.'}
           </p>
         </div>
-        <span className={clsx('order-first ml-auto rounded-full px-3 py-1 text-xs font-bold sm:order-none sm:ml-0', premium ? 'bg-[#f5c542] text-[#2a1d05]' : 'bg-surface-2 text-ink-2')}>
+        <span className={clsx('order-first ml-auto rounded-full px-3 py-1 text-xs font-bold sm:order-none sm:ml-0', t.badge)}>
           {plan.lifetime ? 'Free forever' : premium ? 'Active' : 'Trial'}
         </span>
       </div>
 
       {!premium && plan.days_left != null && (
         <div className="relative mt-5">
-          <div className="h-2 overflow-hidden rounded-full bg-surface-2"><div className="h-full rounded-full bg-brand" style={{ width: `${used}%` }} /></div>
+          <div className="h-2 overflow-hidden rounded-full bg-white/10"><div className={clsx('h-full rounded-full', t.bar)} style={{ width: `${used}%` }} /></div>
         </div>
       )}
 
-      <dl className={clsx('relative mt-5 grid grid-cols-3 gap-2 rounded-2xl p-3 text-center', premium ? 'bg-white/10' : 'bg-surface-2')}>
+      <dl className="relative mt-5 grid grid-cols-3 gap-2 rounded-2xl bg-white/10 p-3 text-center">
         {[
           ['Broker accounts', `${plan.usage.brokers} / ${plan.limits.brokers}`],
           ['Live trading', plan.limits.live ? 'On' : 'Pro'],
           ['Channels copied', `${plan.usage.channels}`],
         ].map(([k, v]) => (
           <div key={k}>
-            <dt className={clsx('text-[11px]', premium ? 'text-white/60' : 'text-ink-3')}>{k}</dt>
+            <dt className="text-[11px] text-white/60">{k}</dt>
             <dd className="text-lg font-bold tabular">{v}</dd>
           </div>
         ))}

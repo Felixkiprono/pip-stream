@@ -323,7 +323,8 @@ class ExecutionRouter:
         weekend = now.weekday() == 5 or (now.weekday() == 6 and now.hour < 21) or (now.weekday() == 4 and now.hour >= 21)
         wants = ("BTCUSD", "ETHUSD") if weekend else ()
         wants += ("EURUSD", "XAUUSD", "GBPUSD", "USDJPY")
-        pick = next((s for want in wants for s in specs if s.upper().startswith(want)), next(iter(specs), None))
+        from ..risk_engine.sizing import resolve_symbol
+        pick = next((r for want in wants if (r := resolve_symbol(want, {}, set(specs)))), next(iter(specs), None))
         if pick is None:
             return await step("Test order", False, "no tradable symbol reported by the terminal")
         vol = specs[pick].volume_min

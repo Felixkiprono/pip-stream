@@ -15,6 +15,17 @@ return [
     // The address the PipStream EA calls. Empty: the address the customer downloaded it from.
     'ea_url' => env('PS_EA_URL'),
 
+    // Redis without an ACL file (NanoDeploi's managed Redis): `php artisan pipstream:redis-user`
+    // logs in with the host's own Redis password and creates Laravel's ACL user "laravel"
+    // (rules in resources/redis/laravel.acl, generated from the engine's permissions.py).
+    'redis_laravel_password' => env('PS_REDIS_PASSWORD_LARAVEL'),
+    'redis_admin' => [
+        'host' => env('REDIS_HOST', '127.0.0.1'),
+        'port' => (int) env('REDIS_PORT', 6379),
+        'username' => env('PS_REDIS_ADMIN_USERNAME'),
+        'password' => env('PS_REDIS_ADMIN_PASSWORD', env('REDIS_PASSWORD')),
+    ],
+
     'engine_url' => env('PS_ENGINE_URL', 'http://engine:8001'),
 
     // How long a web request waits for the engine to answer a Telegram login step

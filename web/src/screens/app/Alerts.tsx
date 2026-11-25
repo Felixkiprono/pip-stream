@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import clsx from 'clsx'
-import { ChevronRight, CircleAlert, CircleCheck, CircleSlash, Info } from 'lucide-react'
+import { ChevronRight, CircleAlert, CircleCheck, CircleSlash, Copy, Info, Plug, PlugZap } from 'lucide-react'
 import { Link } from 'react-router'
 import { useEffect } from 'react'
 import { Page } from '../../components/AppShell'
@@ -16,6 +16,9 @@ const ICON: Record<string, [any, string]> = {
   position_closed: [CircleCheck, 'text-brand bg-brand-soft'],
   trade_failed: [CircleAlert, 'text-down bg-down-soft'],
   signal_skipped: [CircleSlash, 'text-warn bg-warn-soft'],
+  signal_duplicate: [Copy, 'text-ink-2 bg-surface-2'],
+  ea_offline: [Plug, 'text-down bg-down-soft'],
+  ea_online: [PlugZap, 'text-up bg-up-soft'],
 }
 
 export default function Alerts() {

@@ -36,6 +36,14 @@ class RetryableError(ConnectorError):
     """Network / timeout / requote -> router retries while the intent is still valid."""
 
 
+class NotSentError(ConnectorError):
+    """The order never reached the venue (terminal offline) -> a modify/close may be sent again later."""
+
+
+class NoAnswerError(ConnectorError):
+    """Sent, but no answer came back: the outcome is unknown, so only idempotent orders are re-sent."""
+
+
 class AuthError(ConnectorError):
     """Credentials rejected -> disable account, notify user."""
 

@@ -10,6 +10,8 @@ from pipstream.services.execution_router.connectors import registry
 from pipstream.services.execution_router.connectors.base import Connector, ConnectorError
 from pipstream.services.execution_router.connectors.ea_bridge import MAGIC
 
+from .conftest import wait_for
+
 
 def intent(**kw):
     d = dict(idempotency_key="k", user_id="u", broker_account_id="b1", copy_rule_id="r", connector="ea_bridge",
@@ -220,6 +222,69 @@ async def test_connection_test_and_demo_test_order(acl_redis, test_db, keys):
         out = json.loads(await web.get("ps:acct:bk1:test:t3"))
         assert not out["ok"] and "demo accounts only" in out["steps"][-1]["detail"]
         assert [c["action"] for c in seen_cmds].count("open") == 1
+    finally:
+        task.cancel()
+        await close_context(c)
+        await web.aclose()
+        await pool.close()
+
+
+async def test_router_retries_followups_but_never_opens_when_terminal_was_offline(acl_redis, test_db, keys):
+    """Terminal offline: a modify is sent again once it is back; an open fails at once and is never re-sent."""
+    import time as _time
+
+    from redis.asyncio import Redis
+
+    from pipstream.common.db import create_pool, migrate
+    from pipstream.common.events import Event, Topic
+    from pipstream.common.service import build_context, close_context
+    from pipstream.common.settings import Settings
+    from pipstream.common.signing import IntentSigner
+    from pipstream.services.execution_router.service import ExecutionRouter
+
+    pool = await create_pool(test_db)
+    await migrate(pool)
+    await pool.execute("insert into connectors (name, kind) values ('ea_bridge', 'cfd') on conflict do nothing")
+    await pool.execute("insert into users (id, email, name) values ('u1', 'a@b.c', 'A')")
+    await pool.execute("insert into broker_accounts (id, user_id, connector, label) values ('b1', 'u1', 'ea_bridge', 'MT5')")
+    web = Redis.from_url(acl_redis["url"]("laravel"), decode_responses=True)
+    await web.set("ps:eares:b1:seen", str(_time.time() - 600))  # offline for 10 minutes
+    seen = []
+
+    async def ea():
+        done = set()
+        while True:
+            if await web.get("ps:eares:x:online") == "1":
+                await web.set("ps:eares:b1:seen", str(_time.time()))
+            for _id, f in reversed(await web.xrevrange("ps:acct:b1:ea:cmd", "+", "-", count=20)):
+                c = json.loads(f["c"])
+                if c["id"] not in done:
+                    done.add(c["id"])
+                    seen.append(c["action"])
+                    await web.set(f"ps:eares:b1:r:{c['id']}", json.dumps({"ok": True, "ticket": c.get("ticket")}))
+            await asyncio.sleep(0.02)
+
+    s = Settings(redis_url=acl_redis["url"]("executor"), database_url=test_db, router_followup_retry_s="0.4,0.4,0.4",
+                 **keys)
+    c = await build_context("executor", s)
+    task = asyncio.create_task(ea())
+    signer = IntentSigner(keys["intent_signing_key"])
+    try:
+        router = ExecutionRouter(c)
+        for i in (intent(user_id="u1", idempotency_key="m1", action="modify", ticket="77", sl=2349.0),
+                  intent(user_id="u1", idempotency_key="o1")):
+            i = signer.sign(i.model_copy(update={"expires_at": signer.expiry()}))
+            await router.handle(Event(topic=Topic.TRADE_INTENT, trace_id="tr", producer="risk",
+                                      payload=i.model_dump(mode="json")))
+        opened = await pool.fetchrow("select status, error from orders where action='open'")
+        assert opened["status"] == "failed" and "offline" in opened["error"]
+        assert await pool.fetchval("select count(*) from orders where action='modify'") == 0  # waiting to retry
+        await web.set("ps:eares:x:online", "1")
+
+        async def modified():
+            return await pool.fetchval("select status from orders where action='modify'")
+        assert await wait_for(modified, timeout=5) == "executed"
+        assert seen == ["modify"]  # the open never reached the terminal
     finally:
         task.cancel()
         await close_context(c)

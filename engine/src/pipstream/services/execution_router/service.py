@@ -5,6 +5,8 @@ For every `trade.intent`:
   2. reject if expired (5 s TTL) or a kill switch is on, re-check hard lot caps
   3. claim the idempotency key (SET NX) so re-deliveries never double-trade
   4. decrypt credentials in memory, call the connector, retry only RetryableError while valid
+  4b. a modify or close that failed for a passing reason (terminal offline, network, no answer)
+     is tried again later (PS_ROUTER_FOLLOWUP_RETRY_S); opens never are, a late entry is worse
   5. publish trade.executed | trade.failed and persist `orders`
 
 A snapshot loop publishes account.snapshot (balance, symbol specs, positions) which the
@@ -25,7 +27,7 @@ from ...common.signing import IntentVerifier
 from ...common.vault import Opener
 from ..parser.engine import SymbolCatalog
 from .connectors import registry
-from .connectors.base import AuthError, Connector, ConnectorError, RetryableError
+from .connectors.base import AuthError, Connector, ConnectorError, NoAnswerError, NotSentError, RetryableError
 
 
 class ConnectorPool:
@@ -104,6 +106,7 @@ class ExecutionRouter:
         self.p = s.stream_prefix
         self._tasks: set[asyncio.Task] = set()
         self._setting_up: set[str] = set()
+        self.retry_delays = [float(x) for x in str(s.router_followup_retry_s).split(",") if x.strip()]
 
     async def _kill_switch(self, user_id: str) -> bool:
         vals = await self.c.redis.mget(f"{self.p}:killswitch:global", f"{self.p}:killswitch:user:{user_id}")
@@ -138,6 +141,9 @@ class ExecutionRouter:
             self.c.log.info("duplicate intent ignored", extra=ctx(**log_ctx, key=intent.idempotency_key))
             return
 
+        await self._execute(ev, intent, attempt=0)
+
+    async def _execute(self, ev: Event, intent: TradeIntent, attempt: int) -> None:
         async with self.pool.lock(intent.broker_account_id):
             delay = 0.05
             while True:
@@ -149,22 +155,59 @@ class ExecutionRouter:
                         res = await conn.modify(intent.ticket, intent.sl, intent.tp)
                     else:
                         res = await conn.close(intent.ticket, intent.volume)
-                    return await self._finish(ev, intent, result=res)
+                    return await self._finish(ev, intent, result=res, attempts=attempt + 1)
                 except RetryableError as e:
                     await self.pool.evict(intent.broker_account_id)
-                    if self.verifier.expired(intent):
-                        return await self._finish(ev, intent, error=f"retry window expired: {e}")
+                    if attempt > 0 or self.verifier.expired(intent):
+                        err, sent = (str(e) if attempt else f"retry window expired: {e}"), False
+                        break
                     await asyncio.sleep(delay)
                     delay = min(delay * 2, 1.0)
                 except AuthError as e:
                     await self.c.db.execute("update broker_accounts set enabled = false where id = $1",
                                             intent.broker_account_id)
                     await self.pool.evict(intent.broker_account_id)
-                    return await self._finish(ev, intent, error=f"auth: {e}")
+                    return await self._finish(ev, intent, error=f"auth: {e}", attempts=attempt + 1)
+                except NotSentError as e:
+                    err, sent = str(e), False
+                    break
+                except NoAnswerError as e:
+                    err, sent = str(e), True
+                    break
                 except (ConnectorError, KeyError) as e:
-                    return await self._finish(ev, intent, error=str(e))
+                    return await self._finish(ev, intent, error=str(e), attempts=attempt + 1)
+        if await self._retry_later(ev, intent, attempt, sent):
+            return
+        await self._finish(ev, intent, error=err, attempts=attempt + 1)
 
-    async def _finish(self, ev: Event, intent: TradeIntent, *, result=None, error: str | None = None) -> None:
+    async def _retry_later(self, ev: Event, intent: TradeIntent, attempt: int, sent: bool) -> bool:
+        """Schedule another try of a failed modify/close. Never for opens. After an unanswered
+        command only re-send what is safe to repeat: a modify (same SL/TP) or a full close."""
+        if intent.action == "open" or attempt >= len(self.retry_delays):
+            return False
+        if sent and intent.action == "close":
+            vol = await self.c.db.fetchval("select volume from positions where broker_account_id = $1 and ticket = $2",
+                                           intent.broker_account_id, intent.ticket)
+            if vol is not None and intent.volume is not None and intent.volume < float(vol) - 1e-9:
+                return False  # a partial close might already have happened: never close twice
+        wait = self.retry_delays[attempt]
+        self.c.log.warning("order will be retried", extra=ctx(trace_id=ev.trace_id, intent_id=intent.intent_id,
+                                                              action=intent.action, attempt=attempt + 1, in_s=wait))
+
+        async def later() -> None:
+            with contextlib.suppress(asyncio.TimeoutError):
+                await asyncio.wait_for(self.c.stop.wait(), wait)
+            if self.c.stop.is_set():
+                return await self._finish(ev, intent, error="engine stopped before the retry", attempts=attempt + 1)
+            if await self._kill_switch(intent.user_id):
+                return await self._finish(ev, intent, error="kill_switch", attempts=attempt + 1)
+            await self._execute(ev, intent, attempt + 1)
+
+        self._spawn(later())
+        return True
+
+    async def _finish(self, ev: Event, intent: TradeIntent, *, result=None, error: str | None = None,
+                      attempts: int = 1) -> None:
         ok = result is not None and result.ok and error is None
         latency = None
         if intent.posted_at:
@@ -189,7 +232,7 @@ class ExecutionRouter:
         await self.c.bus.publish(Topic.TRADE_EXECUTED if ok else Topic.TRADE_FAILED, tr, trace_id=ev.trace_id)
         self.c.log.info("trade " + tr.status, extra=ctx(trace_id=ev.trace_id, intent_id=intent.intent_id,
                                                        action=intent.action, ticket=tr.ticket, error=tr.error,
-                                                       latency_ms=latency))
+                                                       latency_ms=latency, attempts=attempts))
 
     # ------------------------------------------------------------------ snapshots
     async def snapshot_once(self) -> None:

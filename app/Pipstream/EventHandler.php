@@ -80,6 +80,13 @@ class EventHandler
     private function limit(array $p): void
     {
         if ($u = $this->user($p['user_id'])) {
+            if (in_array($p['limit'], ['duplicate_signal', 'duplicate_edit'], true)) {
+                $u->notify(new TradeAlert('signal_duplicate', 'Repeat signal not copied', $p['limit'] === 'duplicate_edit'
+                    ? 'The channel edited a post you already copied. Only SL/TP changes are applied; it is never opened twice.'
+                    : 'The channel posted the same signal again ('.($p['detail'] ?? 'already copied').'), so it was not opened twice.', $p));
+
+                return;
+            }
             $why = match ($p['limit']) {
                 'kill_switch' => 'copying is paused',
                 'no_subscription' => 'your plan has ended',

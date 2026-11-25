@@ -17,7 +17,7 @@ import json
 import time
 
 from ....common.events import AccountInfo, Position, SymbolSpec, TradeIntent
-from .base import ConnectorError, Credentials, Health, OrderResult, RetryableError
+from .base import ConnectorError, Credentials, Health, NoAnswerError, NotSentError, OrderResult, RetryableError
 from .registry import register
 
 MAGIC = 770077
@@ -48,9 +48,9 @@ class EABridgeConnector:
     async def _require_online(self) -> None:
         age = await self._seen_age()
         if age is None:
-            raise ConnectorError("MetaTrader terminal has never checked in: is the PipStream EA running?")
+            raise NotSentError("MetaTrader terminal has never checked in: is the PipStream EA running?")
         if age > OFFLINE_AFTER_S:
-            raise ConnectorError(f"MetaTrader terminal offline (last check-in {int(age)} s ago)")
+            raise NotSentError(f"MetaTrader terminal offline (last check-in {int(age)} s ago)")
 
     async def _run(self, cmd_id: str, cmd: dict) -> OrderResult:
         await self._require_online()
@@ -73,7 +73,7 @@ class EABridgeConnector:
                                    raw={k: r[k] for k in ("retcode", "new_ticket") if k in r})
             await self._sleep(0.05)
         self._queued.discard(cmd_id)
-        raise ConnectorError("MetaTrader terminal did not answer in time")
+        raise NoAnswerError("MetaTrader terminal did not answer in time")
 
     @staticmethod
     def _cid(intent: TradeIntent) -> str:

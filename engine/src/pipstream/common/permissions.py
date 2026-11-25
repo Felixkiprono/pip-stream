@@ -46,7 +46,8 @@ SERVICES: dict[str, ServicePerms] = {
         consume=frozenset({T.SIGNAL_PARSED}),
         broadcast=frozenset({T.CONFIG_CHANGED, T.BILLING_CHANGED}),
         ro_keys=("ps:acct:*", "ps:quote:*", "ps:killswitch:*"),
-        rw_keys=("ps:chtest:*",),  # channel self-tests: writes what it would copy
+        # channel self-tests (what it would copy) and the duplicate-signal guard
+        rw_keys=("ps:chtest:*", "ps:dup:*"),
     ),
     # executor = execution router + position tracker (holds broker credentials)
     "executor": ServicePerms(

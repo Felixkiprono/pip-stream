@@ -50,10 +50,18 @@ class Settings(BaseModel):
     # channel filters, entry slippage, require SL, max open trades, daily loss) so every
     # parsed signal becomes a trade. Kill switches and position sizing still apply. Beta/testing.
     risk_checks: bool = True
+    # Duplicate-signal guard: the same channel + symbol + side + levels again within this many
+    # seconds opens nothing for a rule that already copied it (0 turns it off). A rule can set
+    # its own with limits.duplicate_window_min.
+    risk_duplicate_window_s: int = 1800
 
     # Router
     router_global_max_lot: float = 5.0
     router_snapshot_interval_s: float = 30.0
+    # Modify / close orders that failed for a passing reason (terminal offline, timeout, network)
+    # are tried again after these delays in seconds. Opens are never retried after their 5 s
+    # window: a late or doubled entry is worse than a missed one.
+    router_followup_retry_s: str = "5,15,45,120"
 
     # MetaApi (hosted MT4/MT5 terminals, metaapi.cloud). Token: executor only.
     metaapi_token: str | None = None

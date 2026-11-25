@@ -21,10 +21,13 @@ class TradeAlert extends Notification implements ShouldQueue
     {
         $prefs = DB::table('notification_prefs')->where('user_id', $notifiable->id)->pluck('address', 'channel');
         $via = ['database'];
+        if ($this->kind === 'signal_duplicate') {
+            return $via;  // a channel re-posting is common: keep it in the app's feed only
+        }
         if ($prefs->has('telegram_bot') && $prefs['telegram_bot']) {
             $via[] = TelegramBotChannel::class;
         }
-        if ($prefs->has('email') && in_array($this->kind, ['trade_failed', 'signal_skipped'], true)) {
+        if ($prefs->has('email') && in_array($this->kind, ['trade_failed', 'signal_skipped', 'ea_offline'], true)) {
             $via[] = 'mail';
         }
 
@@ -43,7 +46,7 @@ class TradeAlert extends Notification implements ShouldQueue
     public function toTelegram(object $notifiable): string
     {
         $icon = ['trade_opened' => '✅', 'trade_modified' => '🛡', 'trade_closed' => '📕', 'position_closed' => '🎯',
-            'trade_failed' => '⚠️', 'signal_skipped' => '⏸'][$this->kind] ?? '•';
+            'trade_failed' => '⚠️', 'signal_skipped' => '⏸', 'ea_offline' => '🔌', 'ea_online' => '✅'][$this->kind] ?? '•';
 
         return "{$icon} {$this->title}\n{$this->body}";
     }

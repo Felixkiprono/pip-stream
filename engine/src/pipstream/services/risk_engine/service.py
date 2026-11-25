@@ -9,11 +9,17 @@ Follow-ups (modify / close) are resolved to concrete tickets through the positio
 (written by the position tracker), so "move SL to entry" touches exactly the trades opened
 from the original message.
 
+Duplicates: a rule copies one post once. An edit of a post that was already copied only moves
+SL/TP (never opens again), and the same channel + symbol + side + levels posted again within
+the duplicate window (30 min by default) is skipped as `duplicate_signal`.
+
 Modes: shadow = record "would have traded" only (week 1); paper = paper connector;
 live = the account's real connector (demo accounts during the experiment).
 """
 from __future__ import annotations
 
+import hashlib
+import time
 from datetime import datetime, timedelta, timezone
 
 from ...common.events import (AccountInfo, Event, ParsedSignal, RiskLimitHit, SymbolSpec, TradeIntent,
@@ -98,8 +104,9 @@ class RiskEngine:
             return
         rule = sorted(rules, key=lambda r: r["mode"] == "shadow")[0]  # the app keeps one rule per channel
         base = {"mode": rule["mode"], "broker_account_id": rule["broker_account_id"], "connector": rule["connector"]}
+        place = t.place and rule["mode"] != "shadow"
         try:
-            intents = await self.plan(sig, rule)
+            intents = await self.plan(sig, rule, claim=place)
         except Skip as s:
             await selftest.update(self.c.redis, p, t.test_id, state="planned", done=True,
                                   plan={**base, "status": "skipped", "limit": s.limit, "detail": s.detail})
@@ -107,7 +114,6 @@ class RiskEngine:
         legs = [{"action": i.action, "symbol": i.symbol, "side": i.side, "order_type": i.order_type, "price": i.price,
                  "ref_price": i.ref_price, "volume": i.volume, "sl": i.sl, "tp": i.tp, "tp_index": i.tp_index,
                  "options": i.options.model_dump() if i.options else None} for i in intents]
-        place = t.place and rule["mode"] != "shadow"
         if place:
             for intent in intents:
                 await self._emit(intent, trace_id)
@@ -137,7 +143,9 @@ class RiskEngine:
         await self.c.bus.publish(Topic.TRADE_INTENT, intent, trace_id=trace_id)
 
     # ------------------------------------------------------------------ planning
-    async def plan(self, sig: ParsedSignal, rule: dict) -> list[TradeIntent]:
+    async def plan(self, sig: ParsedSignal, rule: dict, *, claim: bool = True) -> list[TradeIntent]:
+        """The intents for one rule. `claim` records the post as copied for the duplicate guard
+        (off for a self-test that only shows what would happen)."""
         if rule["user_kill"] or await self.c.redis.get(f"{self.p}:killswitch:user:{rule['user_id']}") == "1":
             raise Skip("kill_switch", "user kill switch on")
         if self.checks:
@@ -153,11 +161,56 @@ class RiskEngine:
             existing = await self._open_positions(rule["broker_account_id"], sig.channel_id, sig.source.message_id)
             if existing:
                 return self._edit_to_modify(sig, rule, existing)
+            if await self._already_copied(sig, rule):
+                raise Skip("duplicate_edit", "this post was already copied; an edit never opens it again")
             if sig.source.posted_at and datetime.now(timezone.utc) - sig.source.posted_at > timedelta(seconds=120):
                 raise Skip("stale_edit", "edited signal older than 120 s with no trade")
-        if sig.kind == "options":
-            return await self._options(sig, rule)
-        return await self._open(sig, rule)
+        intents = await (self._options(sig, rule) if sig.kind == "options" else self._open(sig, rule))
+        if claim:
+            await self._claim(sig, rule)
+        return intents
+
+    # ------------------------------------------------------------------ duplicates
+    @staticmethod
+    def fingerprint(sig: ParsedSignal) -> str:
+        """Same channel, symbol, side, entry, SL and TPs (or the same options contract) = same signal."""
+        def n(x) -> str:
+            return "" if x is None else f"{float(x):.6g}"
+        e, o = sig.entry, sig.options
+        parts = [sig.channel_id, sig.kind, (sig.symbol or "").upper(), sig.side or "",
+                 e.type if e else "", n(e.price) if e else "", n(e.from_) if e else "", n(e.to) if e else "",
+                 n(sig.sl), ",".join(n(t) for t in sig.tps), n(sig.sl_pips), ",".join(n(t) for t in sig.tp_pips),
+                 f"{o.contract}:{o.duration}{o.duration_unit}" if o else ""]
+        return hashlib.sha256("|".join(parts).encode()).hexdigest()[:24]
+
+    def _dup_window_s(self, rule: dict) -> int:
+        mins = (rule.get("limits") or {}).get("duplicate_window_min")
+        return int(float(mins) * 60) if mins is not None else int(self.c.settings.risk_duplicate_window_s)
+
+    async def _claim(self, sig: ParsedSignal, rule: dict) -> None:
+        """First copy of this signal for this rule within the window wins; a repeat is skipped.
+        A re-delivery of the same signal (same signal_id) passes: trade_intents keys stop doubles."""
+        window = self._dup_window_s(rule)
+        if window <= 0:
+            return
+        key = f"{self.p}:dup:{rule['id']}:{self.fingerprint(sig)}"
+        if await self.c.redis.set(key, f"{sig.signal_id}|{time.time():.0f}", nx=True, ex=window):
+            return
+        prev_id, _, at = (await self.c.redis.get(key) or "").partition("|")
+        if prev_id in ("", sig.signal_id):
+            return
+        ago = max(int((time.time() - float(at or time.time())) / 60), 0)
+        what = " ".join(x for x in (sig.symbol, sig.side) if x)
+        raise Skip("duplicate_signal", f"the same {what} signal was copied "
+                                       + ("just now" if ago < 1 else f"{ago} min ago"))
+
+    async def _already_copied(self, sig: ParsedSignal, rule: dict) -> bool:
+        """Did an earlier version of this post already open something for this rule (and not fail)?"""
+        return bool(await self.c.db.fetchval(
+            "select exists (select 1 from trade_intents i join signals s on s.id = i.signal_id "
+            "where i.copy_rule_id = $1 and s.channel_id = $2 and s.message_id = $3 and i.action = 'open' "
+            "and i.signal_id <> $4 and not exists (select 1 from orders o where o.intent_id = i.id "
+            "and o.status = 'failed'))", rule["id"], sig.channel_id, sig.source.message_id, sig.signal_id))
 
     def _base(self, sig: ParsedSignal, rule: dict, **kw) -> dict:
         kw.setdefault("max_lot", float(rule["max_lot"]))

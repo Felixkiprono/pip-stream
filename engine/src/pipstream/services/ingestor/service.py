@@ -5,12 +5,14 @@
   Redis lease so one session is never connected twice; if a replica dies its lease expires
   and standby readers take over the channels.
 - Each channel is read ONCE (channel_readers: active + standby) and fanned out downstream.
-- Dedupe key channel:message:edit_version for 24 h.
+- Dedupe key channel:message:edit_version for 24 h, and an "edit" whose text did not change
+  (Telegram also reports reactions, view counts and re-sent updates as edits) is dropped.
 """
 from __future__ import annotations
 
 import asyncio
 import contextlib
+import hashlib
 
 from ...common.events import Event, TgMessage, Topic
 from ...common.ids import new_id
@@ -143,13 +145,18 @@ class IngestorService:
         if not self.replay and self.assignment.get(channel_id) != account_id:
             return  # another session is the reader for this channel
         version = 0
+        tkey = f"{self.p}:editver:{post.tg_chat_id}:{post.message_id}:text"
+        digest = hashlib.sha256(" ".join(post.text.split()).encode()).hexdigest()[:24]
         if post.is_edit:
+            if await self.c.redis.get(tkey) == digest:
+                return  # nothing in the text changed: not a new version of the signal
             vkey = f"{self.p}:editver:{post.tg_chat_id}:{post.message_id}"
             version = await self.c.redis.incr(vkey)
             await self.c.redis.expire(vkey, 7 * 24 * 3600)
         dkey = f"{self.p}:dedupe:{post.tg_chat_id}:{post.message_id}:{version}"
         if not await self.c.redis.set(dkey, "1", nx=True, ex=DEDUPE_TTL_S):
             return
+        await self.c.redis.set(tkey, digest, ex=7 * 24 * 3600)
         msg = TgMessage(telegram_account_id=account_id, channel_id=channel_id, tg_chat_id=post.tg_chat_id,
                         message_id=post.message_id, reply_to_id=post.reply_to_id, edit_version=version,
                         text=post.text, has_media=post.has_media, posted_at=post.posted_at)

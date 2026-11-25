@@ -60,6 +60,10 @@ return [
     // (stored on users.terms_version). Change it together with the "Last updated" date in web/src/screens/Legal.tsx.
     'terms_version' => '2026-11-25',
 
+    // Watchdog alerts (a worker, the engine or a customer's MetaTrader stopped; errors spiking):
+    // comma-separated emails. Empty: the superadmin email above.
+    'alert_emails' => env('PS_ALERT_EMAILS', ''),
+
     // Beta: shown across the app
     'beta' => (bool) env('PS_BETA', true),
 

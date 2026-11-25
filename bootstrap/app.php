@@ -30,6 +30,10 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias(['admin' => EnsureAdmin::class, 'superadmin' => EnsureSuperadmin::class, 'active' => EnsureActive::class]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
+        // error-rate alerts (App\Pipstream\Watchdog): count what gets reported, keep reporting it
+        $exceptions->report(function (Throwable $e) {
+            \App\Pipstream\Watchdog::countException();
+        });
         $exceptions->shouldRenderJsonWhen(
             fn (Request $request) => $request->is('api/*') || $request->is('webhooks/*') || $request->expectsJson(),
         );

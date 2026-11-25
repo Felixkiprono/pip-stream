@@ -604,8 +604,10 @@ export function AdminAudit() {
 }
 
 type Check = { group: string; name: string; state: 'ok' | 'warn' | 'fail'; detail: string }
+type Incident = { id: number; key: string; severity: 'error' | 'warn'; title: string; detail: string | null; started_at: string; resolved_at: string | null }
 type SystemInfo = {
   checks: Check[]
+  alerts: Incident[]
   workers: { name: string; healthy: boolean; status: Record<string, unknown> | null }[]
   my_telegram: { linked: boolean; status: string; phone_hint: string | null; last_error: string | null } | null
 }
@@ -658,6 +660,34 @@ export function AdminSystem() {
     <>
       <H right={<Badge tone={fails ? 'down' : warns ? 'warn' : 'up'}>{fails ? `${fails} failing` : warns ? `${warns} to check` : 'all good'}</Badge>}>System</H>
       <p className="mb-4 text-ink-2">What is running and how it is configured. Secrets show only as set or missing, never their values. Refreshes every 5 seconds.</p>
+
+      <h2 className="mb-2 text-lg font-bold">Incidents</h2>
+      <Card className="mb-6 p-0">
+        {q.data.alerts.length === 0 ? (
+          <p className="px-4 py-3 text-sm text-ink-2">Nothing has gone down. The watchdog checks every minute and emails you when a worker, the engine or a customer's MetaTrader stops, or errors spike.</p>
+        ) : (
+          <ul className="divide-y divide-line text-sm">
+            {q.data.alerts.map((a) => (
+              <li key={a.id} className="flex items-start gap-3 px-4 py-3">
+                {a.resolved_at ? (
+                  <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-up" aria-label="resolved" />
+                ) : (
+                  <CircleX className={clsx('mt-0.5 size-4 shrink-0', a.severity === 'warn' ? 'text-warn' : 'text-down')} aria-label="open" />
+                )}
+                <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                  <span className="font-semibold">
+                    {a.title} {!a.resolved_at && <Badge tone={a.severity === 'warn' ? 'warn' : 'down'}>open</Badge>}
+                  </span>
+                  {a.detail && <span className="min-w-0 break-words text-ink-2">{a.detail}</span>}
+                  <span className="text-xs text-ink-3">
+                    started {ago(a.started_at)}{a.resolved_at ? `, recovered ${ago(a.resolved_at)}` : ''}
+                  </span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
 
       <h2 className="mb-2 text-lg font-bold">Tests</h2>
       <div className="mb-6 grid grid-cols-1 gap-3 md:grid-cols-2">

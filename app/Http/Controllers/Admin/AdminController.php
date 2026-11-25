@@ -12,6 +12,7 @@ use App\Pipstream\KillSwitch;
 use App\Pipstream\MailSettings;
 use App\Pipstream\PublicUrl;
 use App\Pipstream\TelegramLink;
+use App\Pipstream\Watchdog;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -272,10 +273,24 @@ class AdminController extends Controller
             : (config('pipstream.superadmin_password') ? 'not seeded yet: run php artisan pipstream:superadmin --seed'
                 : 'PS_SUPERADMIN_PASSWORD not set in .env'));
 
+        // ---------------------------------------------------------------- monitoring (App\Pipstream\Watchdog)
+        $last = Cache::get('watchdog:last_run');
+        $to = $req->user()->isSuperadmin() ? implode(', ', Watchdog::operators()) : 'the operators';
+        $add('Monitoring', 'Watchdog (scheduler)', $last && microtime(true) - $last < 180 ? 'ok' : 'fail', $last
+            ? 'checked '.round(microtime(true) - $last).'s ago; alerts email '.$to
+            : 'never ran: is the "scheduler" service (php artisan schedule:work) running?');
+        $qb = Cache::get('pipstream:queue:beat');
+        $add('Monitoring', 'Queue worker heartbeat', $qb && microtime(true) - $qb < Watchdog::QUEUE_GRACE_S ? 'ok' : 'fail',
+            $qb ? 'last heartbeat job ran '.round(microtime(true) - $qb).'s ago' : 'no heartbeat job has run yet');
+        $openAlerts = DB::table('system_alerts')->whereNull('resolved_at')->count();
+        $add('Monitoring', 'Open incidents', $openAlerts ? 'fail' : 'ok', $openAlerts ? "{$openAlerts} open, listed at the top" : 'none');
+
         $acc = $req->user()->telegramAccounts()->orderByDesc('created_at')->first();
 
         return [
             'checks' => $checks,
+            'alerts' => DB::table('system_alerts')->orderByRaw('resolved_at is not null')->orderByDesc('started_at')->limit(30)
+                ->get(['id', 'key', 'severity', 'title', 'detail', 'started_at', 'resolved_at']),
             'workers' => $workers,
             'my_telegram' => $acc ? ['linked' => $acc->isLinked(), 'status' => $acc->status, 'phone_hint' => $acc->phone_hint,
                 'last_error' => $acc->last_error] : null,

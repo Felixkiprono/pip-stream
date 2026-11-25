@@ -8,7 +8,7 @@ import type { User } from '../../lib/types'
 export default function Auth({ mode }: { mode: 'signup' | 'login' }) {
   const nav = useNavigate()
   const { refresh } = useSession()
-  const [f, setF] = useState({ name: '', email: '', password: '' })
+  const [f, setF] = useState({ name: '', email: '', password: '', accept_terms: false })
   const [err, setErr] = useState<ApiError | null>(null)
   const [busy, setBusy] = useState(false)
   const signup = mode === 'signup'
@@ -68,8 +68,24 @@ export default function Auth({ mode }: { mode: 'signup' | 'login' }) {
           hint={signup ? 'At least 8 characters.' : <Link className="font-semibold text-brand" to="/forgot-password">Forgot your password?</Link>}
           required
         />
+        {signup && (
+          <label className="flex items-start gap-3 rounded-2xl border border-line bg-surface p-3.5 text-[14px] leading-snug text-ink-2">
+            <input type="checkbox" className="mt-0.5 size-5 shrink-0 accent-[var(--brand)]" checked={f.accept_terms}
+              onChange={(e) => setF({ ...f, accept_terms: e.target.checked })} required />
+            <span>
+              I am 18 or older and I accept the <LegalLink to="/terms">Terms of Service</LegalLink>, <LegalLink to="/privacy">Privacy Policy</LegalLink> and{' '}
+              <LegalLink to="/risk">Risk Disclosure</LegalLink>. I understand forex trading is high risk and PipStream is not financial advice.
+              {err?.field('accept_terms') && <span className="mt-1.5 block text-down">{err.field('accept_terms')}</span>}
+            </span>
+          </label>
+        )}
         {err && !Object.keys(err.errors).length && <ErrorNote>{err.message}</ErrorNote>}
       </Step>
     </form>
   )
+}
+
+/** Opens in a new tab so the half-filled form isn't lost. */
+function LegalLink({ to, children }: { to: string; children: React.ReactNode }) {
+  return <Link className="font-semibold text-brand underline-offset-2 hover:underline" to={to} target="_blank" rel="noopener">{children}</Link>
 }

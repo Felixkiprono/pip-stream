@@ -17,6 +17,7 @@ import { TgCode, TgLinked, TgPassword, TgPhone, TgQr } from './screens/onboardin
 import Welcome from './screens/onboarding/Welcome'
 import { ForgotPassword, ResetPassword } from './screens/onboarding/Password'
 import Landing from './screens/Landing'
+import Legal from './screens/Legal'
 import AlertsScreen from './screens/app/Alerts'
 import BillingScreen from './screens/app/Billing'
 import BrokersScreen from './screens/app/Brokers'
@@ -63,6 +64,9 @@ export default function App() {
     <Suspense fallback={<Spinner />}>
       <Routes>
         <Route path="/" element={<Landing />} />
+        <Route path="/terms" element={<Legal doc="terms" />} />
+        <Route path="/privacy" element={<Legal doc="privacy" />} />
+        <Route path="/risk" element={<Legal doc="risk" />} />
         <Route path="/welcome" element={<Welcome />} />
         <Route path="/signup" element={<Auth mode="signup" />} />
         <Route path="/login" element={<Auth mode="login" />} />

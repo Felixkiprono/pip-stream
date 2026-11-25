@@ -38,7 +38,7 @@ class LandingVisitorsTest extends TestCase
         $this->assertSame('Nairobi', DB::table('landing_visits')->find($v[1]->id)->city);
 
         // signing up links the visitor's visits to the account
-        $this->withServerVariables($server)->postJson('/api/v1/auth/register', ['name' => 'Wanjiku', 'email' => 'wanjiku@example.com', 'password' => 'long-enough-1'])->assertOk();
+        $this->withServerVariables($server)->postJson('/api/v1/auth/register', ['name' => 'Wanjiku', 'email' => 'wanjiku@example.com', 'password' => 'long-enough-1', 'accept_terms' => true])->assertOk();
         $uid = User::where('email', 'wanjiku@example.com')->value('id');
         $this->assertSame(2, DB::table('landing_visits')->where('user_id', $uid)->count());
         $this->postJson('/api/v1/auth/logout');

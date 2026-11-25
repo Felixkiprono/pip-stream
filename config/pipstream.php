@@ -56,6 +56,10 @@ return [
     'superadmin_email' => env('PS_SUPERADMIN_EMAIL', 'felixkiprono@yahoo.com'),
     'superadmin_password' => env('PS_SUPERADMIN_PASSWORD'),
 
+    // Terms of Service, Privacy Policy and Risk Disclosure: the version a customer accepts at sign-up
+    // (stored on users.terms_version). Change it together with the "Last updated" date in web/src/screens/Legal.tsx.
+    'terms_version' => '2026-11-25',
+
     // Beta: shown across the app
     'beta' => (bool) env('PS_BETA', true),
 

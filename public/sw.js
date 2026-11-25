@@ -2,7 +2,7 @@
 // - Built assets (/spa/assets/*, hashed names) are cached forever after first use.
 // - Pages are network-first; offline you get the last app shell, which shows cached data.
 // - The API is never cached: balances and trades must always be live.
-const VERSION = 'ps-v1'
+const VERSION = 'ps-v2'
 const SHELL = '/app'
 
 self.addEventListener('install', (e) => {

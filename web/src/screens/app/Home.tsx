@@ -98,11 +98,11 @@ export default function Home() {
 
       {user?.beta && <BetaNote />}
 
-      <div className={clsx('rounded-3xl p-4 text-white shadow-card', copying ? 'bg-brand' : 'bg-ink-2')}>
+      <div className={clsx('rounded-3xl p-4 text-white shadow-card', copying ? 'bg-stream' : 'bg-ink-2')}>
         <div className="flex items-center gap-3">
           <span className={clsx('relative grid size-12 place-items-center rounded-full bg-white/15')}>
             <Radio className="size-6" />
-            {copying && <span className="absolute top-1 right-1 size-2.5 rounded-full bg-[#5dffb7] ring-2 ring-brand" />}
+            {copying && <span className="absolute top-1 right-1 size-2.5 rounded-full bg-[#5dffb7] ring-2 ring-white/40" />}
           </span>
           <span className="flex-1">
             <span className="block text-lg font-bold">{h.global_pause ? 'Paused by PipStream' : h.paused ? 'Copying is paused' : 'Copying is on'}</span>

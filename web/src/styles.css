@@ -1,69 +1,98 @@
 @import "tailwindcss";
 
-/* PipStream design tokens. Light by default; dark below (device setting or the in-app toggle). */
+/* PipStream theme: "Midnight market". Forex blue, crypto gold, a blue-to-teal stream.
+   Light by default; dark below (device setting or the in-app toggle). Text tokens meet WCAG AA on their surfaces. */
 :root {
-  --bg: #f6f7fb;
+  --bg: #f5f7fb;
   --surface: #ffffff;
-  --surface-2: #eef0f6;
-  --line: #e2e5ee;
-  --ink: #0d1424;
-  --ink-2: #4b5468;
-  --ink-3: #8a92a6;
-  --brand: #1f6fff;
+  --surface-2: #eef1f7;
+  --line: #e1e6ef;
+  --ink: #0b1220;
+  --ink-2: #485267;
+  --ink-3: #697389;
+  --brand: #2563ff;
+  --brand-strong: #1d4ed8;
   --brand-ink: #ffffff;
-  --brand-soft: #e3ecff;
-  --up: #0f9d6b;
+  --brand-soft: #e4ebff;
+  --accent: #0a9b8a;
+  --accent-soft: #d9f5f0;
+  --up: #0a8a5c;
   --up-soft: #dcf5ea;
-  --down: #e0444e;
+  --down: #d63a45;
   --down-soft: #fde4e5;
-  --warn: #c27c0e;
+  --warn: #b26d00;
   --warn-soft: #fbefd9;
+  --gold: #f5a300;
+  --gold-ink: #8a5a00;
+  --gold-soft: #fdf1d4;
+  --violet: #6d4aff;
   --tg: #2aabee;
-  --shadow: 0 1px 2px rgb(13 20 36 / 0.06), 0 8px 24px rgb(13 20 36 / 0.06);
+  --stream: linear-gradient(120deg, #1d4ed8 0%, #2563ff 55%, #0a7f86 100%);
+  --stream-bright: linear-gradient(120deg, #2563ff 0%, #0a9b8a 100%);
+  --coin: linear-gradient(135deg, #ffd25a, #f5a300);
+  --shadow: 0 1px 2px rgb(11 18 32 / 0.06), 0 8px 24px rgb(11 18 32 / 0.06);
 }
 /* Theme: follows the device unless the person picked one (html[data-theme], set by the toggle). */
 :root { color-scheme: light; }
 :root[data-theme="dark"] {
   color-scheme: dark;
-    --bg: #0b1220;
-    --surface: #121a2b;
-    --surface-2: #1a2438;
-    --line: #243049;
+  --bg: #060b16;
+  --surface: #0d1526;
+  --surface-2: #142037;
+  --line: #1f2c47;
+  --ink: #eef2fa;
+  --ink-2: #a9b3c8;
+  --ink-3: #7d88a1;
+  --brand: #4479ff;
+  --brand-strong: #2563ff;
+  --brand-ink: #ffffff;
+  --brand-soft: #16264a;
+  --accent: #14d6a4;
+  --accent-soft: #0c2f2c;
+  --up: #2fd296;
+  --up-soft: #10322a;
+  --down: #ff6b74;
+  --down-soft: #3a1a20;
+  --warn: #f2b14a;
+  --warn-soft: #3a2b12;
+  --gold: #ffc940;
+  --gold-ink: #ffd25a;
+  --gold-soft: #3a2c0c;
+  --violet: #9d86ff;
+  --stream: linear-gradient(120deg, #1d4ed8 0%, #2f6bff 55%, #0a7f86 100%);
+  --stream-bright: linear-gradient(120deg, #4479ff 0%, #14d6a4 100%);
+  --shadow: 0 1px 2px rgb(0 0 0 / 0.3), 0 8px 24px rgb(0 0 0 / 0.25);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #060b16;
+    --surface: #0d1526;
+    --surface-2: #142037;
+    --line: #1f2c47;
     --ink: #eef2fa;
-    --ink-2: #aab3c7;
-    --ink-3: #6f7a92;
-    --brand: #4d8dff;
+    --ink-2: #a9b3c8;
+    --ink-3: #7d88a1;
+    --brand: #4479ff;
+    --brand-strong: #2563ff;
     --brand-ink: #ffffff;
-    --brand-soft: #18284a;
+    --brand-soft: #16264a;
+    --accent: #14d6a4;
+    --accent-soft: #0c2f2c;
     --up: #2fd296;
     --up-soft: #10322a;
     --down: #ff6b74;
     --down-soft: #3a1a20;
     --warn: #f2b14a;
     --warn-soft: #3a2b12;
+    --gold: #ffc940;
+    --gold-ink: #ffd25a;
+    --gold-soft: #3a2c0c;
+    --violet: #9d86ff;
+    --stream: linear-gradient(120deg, #1d4ed8 0%, #2f6bff 55%, #0a7f86 100%);
+    --stream-bright: linear-gradient(120deg, #4479ff 0%, #14d6a4 100%);
     --shadow: 0 1px 2px rgb(0 0 0 / 0.3), 0 8px 24px rgb(0 0 0 / 0.25);
   }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    color-scheme: dark;
-      --bg: #0b1220;
-      --surface: #121a2b;
-      --surface-2: #1a2438;
-      --line: #243049;
-      --ink: #eef2fa;
-      --ink-2: #aab3c7;
-      --ink-3: #6f7a92;
-      --brand: #4d8dff;
-      --brand-ink: #ffffff;
-      --brand-soft: #18284a;
-      --up: #2fd296;
-      --up-soft: #10322a;
-      --down: #ff6b74;
-      --down-soft: #3a1a20;
-      --warn: #f2b14a;
-      --warn-soft: #3a2b12;
-      --shadow: 0 1px 2px rgb(0 0 0 / 0.3), 0 8px 24px rgb(0 0 0 / 0.25);
-    }
 }
 
 @theme inline {
@@ -77,6 +106,13 @@
   --color-brand: var(--brand);
   --color-brand-ink: var(--brand-ink);
   --color-brand-soft: var(--brand-soft);
+  --color-brand-strong: var(--brand-strong);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-gold: var(--gold);
+  --color-gold-ink: var(--gold-ink);
+  --color-gold-soft: var(--gold-soft);
+  --color-violet: var(--violet);
   --color-up: var(--up);
   --color-up-soft: var(--up-soft);
   --color-down: var(--down);
@@ -109,6 +145,10 @@ body {
 input, button, select, textarea { font: inherit; color: inherit; }
 }
 .tabular { font-variant-numeric: tabular-nums; }
+/* Brand surfaces: the stream gradient (white text on it), gradient text, and the gold coin. */
+.bg-stream { background: var(--stream); }
+.text-stream { background: var(--stream-bright); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.bg-coin { background: var(--coin); color: #2a1d05; }
 .safe-top { padding-top: max(env(safe-area-inset-top), 0px); }
 .safe-bottom { padding-bottom: max(env(safe-area-inset-bottom), 12px); }
 

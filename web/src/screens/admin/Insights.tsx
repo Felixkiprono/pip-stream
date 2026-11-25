@@ -75,7 +75,7 @@ export default function AdminInsights() {
   const p = d.people
   const top = Math.max(1, d.funnel[0]?.n ?? 0)
   const plans = Object.values(d.plans.reduce<Record<string, { label: string; value: number; color: string }>>((a, r) => {
-    a[r.plan] ??= { label: r.name, value: 0, color: PLAN_COLOR[r.plan] ?? '#8b5cf6' }
+    a[r.plan] ??= { label: r.name, value: 0, color: PLAN_COLOR[r.plan] ?? 'var(--violet)' }
     a[r.plan].value += r.n
     return a
   }, {}))
@@ -98,7 +98,7 @@ export default function AdminInsights() {
 
       <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
         <Stat icon={Users} label="Customers" value={p.customers} color="var(--brand)" foot={`+${p.new} in ${days}d · ${p.suspended} suspended · ${p.paused} paused`} />
-        <Stat icon={Eye} label="Active (seen 7d)" value={p.seen_7d} color="#8b5cf6" foot={`${p.seen_1d} today · ${p.seen_30d} in 30 days`} />
+        <Stat icon={Eye} label="Active (seen 7d)" value={p.seen_7d} color="var(--violet)" foot={`${p.seen_1d} today · ${p.seen_30d} in 30 days`} />
         <Stat icon={Send} label={`Fills (${days}d)`} value={d.window.fills} color="var(--up)" foot={`${d.window.failed} failed${fillRate != null ? ` · ${fillRate}% filled` : ''} · ${p.traders_window} customers traded`} />
         <Stat icon={Banknote} label={`Revenue (${days}d)`} value={<span className="text-xl sm:text-2xl">{amount(d.revenue.window)}</span>} color="var(--warn)" foot={`All time ${amount(d.revenue.all_time)}`} />
       </div>
@@ -457,13 +457,13 @@ export function AdminVisitors() {
         <>
           <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
             <Stat icon={Users} label="Visitors" value={d.summary.visitors} color="var(--brand)" foot={`${d.summary.all_time} all time`} />
-            <Stat icon={Eye} label="Page views" value={d.summary.views} color="#8b5cf6" foot={`${d.summary.ips} different IPs`} />
+            <Stat icon={Eye} label="Page views" value={d.summary.views} color="var(--violet)" foot={`${d.summary.ips} different IPs`} />
             <Stat icon={UserPlus} label="Signed up" value={d.summary.signed_up} color="var(--up)" foot={conv != null ? `${conv}% of visitors` : undefined} />
             <Stat icon={Globe} label="Countries" value={d.countries.filter((c) => c.key).length} color="var(--warn)" foot={d.countries[0]?.key ? `Most from ${countryName(d.countries[0].key)}` : undefined} />
           </div>
           {!d.geo.provider && <ErrorNote>Location lookups are off (PS_GEO_PROVIDER is empty), so only IPs are shown.</ErrorNote>}
-          <Panel title="Visitors per day" action={<span className="flex gap-3 text-xs text-ink-3"><span className="flex items-center gap-1.5"><span className="size-2 rounded-full bg-brand" />Visitors</span><span className="flex items-center gap-1.5"><span className="size-2 rounded-full" style={{ background: '#8b5cf6' }} />Page views</span></span>}>
-            <DualArea data={d.series.map((s) => ({ t: s.t, a: s.visitors, b: s.views }))} a="var(--brand)" b="#8b5cf6" labelOf={label} />
+          <Panel title="Visitors per day" action={<span className="flex gap-3 text-xs text-ink-3"><span className="flex items-center gap-1.5"><span className="size-2 rounded-full bg-brand" />Visitors</span><span className="flex items-center gap-1.5"><span className="size-2 rounded-full" style={{ background: 'var(--violet)' }} />Page views</span></span>}>
+            <DualArea data={d.series.map((s) => ({ t: s.t, a: s.visitors, b: s.views }))} a="var(--brand)" b="var(--violet)" labelOf={label} />
           </Panel>
           <div className="grid gap-4 lg:grid-cols-3">
             <Panel title="Countries">

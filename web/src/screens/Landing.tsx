@@ -109,7 +109,7 @@ function Hero() {
   return (
     <section className="relative px-5 pt-12 pb-16 md:pt-20 md:pb-24">
       {/* soft colour wash behind the hero */}
-      <div aria-hidden className="anim-glow pointer-events-none absolute inset-x-0 -top-24 -z-0 mx-auto h-[520px] max-w-5xl bg-[radial-gradient(closest-side,color-mix(in_oklab,var(--brand)_28%,transparent),transparent),radial-gradient(closest-side_at_80%_60%,color-mix(in_oklab,var(--up)_22%,transparent),transparent)] blur-2xl" />
+      <div aria-hidden className="anim-glow pointer-events-none absolute inset-x-0 -top-24 -z-0 mx-auto h-[520px] max-w-5xl bg-[radial-gradient(closest-side,color-mix(in_oklab,var(--brand)_28%,transparent),transparent),radial-gradient(closest-side_at_80%_60%,color-mix(in_oklab,var(--accent)_22%,transparent),transparent)] blur-2xl" />
       <div className="relative mx-auto grid max-w-6xl items-center gap-12 md:grid-cols-[1.05fr_1fr]">
         <div className="anim-rise">
           <span className="inline-flex items-center gap-2 rounded-full border border-line bg-surface px-3 py-1 text-sm font-semibold text-ink-2">
@@ -119,7 +119,7 @@ function Hero() {
           <h1 className="mt-5 text-[42px] leading-[1.02] font-bold tracking-tight text-balance md:text-[64px]">
             The channel posts.
             <br />
-            <span className="bg-gradient-to-r from-brand to-up bg-clip-text text-transparent">Your trade is already open.</span>
+            <span className="text-stream">Your trade is already open.</span>
           </h1>
           <p className="mt-5 max-w-[46ch] text-[18px] leading-relaxed text-ink-2">
             PipStream watches the Telegram channels and groups you follow, understands each signal, sizes it to your risk and places it on
@@ -195,7 +195,7 @@ function LiveDemo() {
         </ol>
 
         {/* the trade */}
-        <div className={clsx('mt-4 overflow-hidden rounded-2xl bg-gradient-to-br from-brand to-[#3b5bff] p-4 text-white transition-all duration-500', shown >= 3 ? 'opacity-100' : 'scale-[.98] opacity-0')}>
+        <div className={clsx('mt-4 overflow-hidden rounded-2xl bg-stream p-4 text-white transition-all duration-500', shown >= 3 ? 'opacity-100' : 'scale-[.98] opacity-0')}>
           <div className="flex items-center justify-between">
             <span className="text-sm font-bold">Bought 0.11 XAUUSD</span>
             <span className="rounded-full bg-white/20 px-2 py-0.5 text-[11px] font-semibold">copied in 124 ms</span>
@@ -247,7 +247,7 @@ const STAGES: { icon: typeof Radio; title: string; short: string; detail: ReactN
     example: <span>New post in <b>FX Signal Desk</b> · received in ~20 ms</span>,
   },
   {
-    icon: Brain, title: 'Understands it', short: 'Signal or just chatter?', color: '#8b5cf6',
+    icon: Brain, title: 'Understands it', short: 'Signal or just chatter?', color: 'var(--violet)',
     detail: 'The parser pulls out the symbol, direction, entry or range, stop loss and every take-profit, even with emojis, arrows and “TP 1 ➜” numbering. “Good morning traders” is ignored, not traded.',
     example: <span><b className="text-down">SELL</b> XAUUSD · entry 2440 · SL 2450 · TP 2430, 2420 · <b className="text-up">95% sure</b></span>,
   },
@@ -572,7 +572,7 @@ function Features() {
 function FinalCta() {
   return (
     <section className="px-5 pb-20">
-      <div className="relative mx-auto max-w-6xl overflow-hidden rounded-[36px] bg-gradient-to-br from-brand to-[#3b5bff] px-6 py-14 text-center text-white md:py-20">
+      <div className="relative mx-auto max-w-6xl overflow-hidden rounded-[36px] bg-stream px-6 py-14 text-center text-white md:py-20">
         <div aria-hidden className="pointer-events-none absolute -top-20 -right-20 size-72 rounded-full bg-white/10 blur-2xl" />
         <h2 className="relative text-[32px] leading-tight font-bold tracking-tight text-balance md:text-[48px]">Let your channel do the clicking.</h2>
         <p className="relative mt-3 text-[17px] opacity-90">Free for 14 days on practice money. No card.</p>

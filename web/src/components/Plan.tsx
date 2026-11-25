@@ -24,7 +24,7 @@ export function CrownMark({ plan, className }: { plan?: PlanInfo | null; classNa
 export function FoundingBadge({ number, className }: { number?: number | null; className?: string }) {
   if (!number) return null
   return (
-    <span className={clsx('inline-flex items-center gap-1 rounded-full bg-[linear-gradient(135deg,#f5c542,#e0a526)] px-2.5 py-0.5 text-xs font-bold text-[#2a1d05]', className)} title="One of PipStream's first members: free for life, every feature unlocked">
+    <span className={clsx('inline-flex items-center gap-1 rounded-full bg-coin px-2.5 py-0.5 text-xs font-bold', className)} title="One of PipStream's first members: free for life, every feature unlocked">
       <Award className="size-3.5" /> Founding member #{number}
     </span>
   )

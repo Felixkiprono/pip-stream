@@ -1,18 +1,33 @@
 import clsx from 'clsx'
 import { ChevronLeft, Loader2 } from 'lucide-react'
+import { useId } from 'react'
 import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode } from 'react'
 import { useNavigate } from 'react-router'
 import { hue, initials } from '../lib/format'
 
+/** The PipStream mark: a P whose stem is a candlestick, with a gold coin for the pip. */
+export function Mark({ size = 28, className }: { size?: number; className?: string }) {
+  const id = useId().replace(/:/g, '')
+  return (
+    <svg width={size} height={size} viewBox="0 0 64 64" aria-hidden className={clsx('shrink-0', className)}>
+      <defs>
+        <linearGradient id={`${id}b`} x1="0" y1="64" x2="64" y2="0" gradientUnits="userSpaceOnUse"><stop offset="0" stopColor="#1d4ed8" /><stop offset=".55" stopColor="#2f6bff" /><stop offset="1" stopColor="#14d6a4" /></linearGradient>
+        <linearGradient id={`${id}g`} x1="0" y1="41" x2="0" y2="53" gradientUnits="userSpaceOnUse"><stop offset="0" stopColor="#ffd25a" /><stop offset="1" stopColor="#f5a300" /></linearGradient>
+      </defs>
+      <rect width="64" height="64" rx="16" fill={`url(#${id}b)`} />
+      <path d="M23.5 9.5v8M23.5 46v8.5" stroke="#fff" strokeWidth="3.5" strokeLinecap="round" />
+      <rect x="18" y="16.5" width="11" height="31" rx="3" fill="#fff" />
+      <path d="M27 20.5h8.5a8.75 8.75 0 0 1 0 17.5H27" stroke="#fff" strokeWidth="7.5" fill="none" />
+      <circle cx="46.5" cy="47" r="5.5" fill={`url(#${id}g)`} />
+    </svg>
+  )
+}
+
 export function Logo({ size = 28 }: { size?: number }) {
   return (
-    <span className="inline-flex items-center gap-2 font-semibold tracking-tight">
-      <svg width={size} height={size} viewBox="0 0 64 64" aria-hidden>
-        <rect width="64" height="64" rx="16" fill="var(--brand)" />
-        <path d="M14 40 L26 28 L34 36 L50 20" stroke="#fff" strokeWidth="6" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-        <circle cx="50" cy="20" r="5" fill="#fff" />
-      </svg>
-      <span style={{ fontSize: size * 0.62 }}>PipStream</span>
+    <span className="inline-flex items-center gap-2 font-bold tracking-tight">
+      <Mark size={size} />
+      <span style={{ fontSize: size * 0.62, letterSpacing: '-0.02em' }}>PipStream</span>
     </span>
   )
 }

@@ -87,7 +87,7 @@ function Funnel({ w }: { w: Win }) {
   const steps: [string, number, string, typeof Zap][] = [
     ['Posts read', posts, 'var(--ink-3)', Radio],
     ['Signals', w.signals, 'var(--brand)', Filter],
-    ['Trades planned', w.intents, '#8b5cf6', Cpu],
+    ['Trades planned', w.intents, 'var(--violet)', Cpu],
     ['Executed', w.executed, 'var(--up)', CircleCheck],
   ]
   const max = Math.max(1, posts)
@@ -115,7 +115,7 @@ function Funnel({ w }: { w: Win }) {
 }
 
 const FEED: Record<Dash['feed'][number]['type'], [typeof Zap, string]> = {
-  signal: [Radio, 'var(--brand)'], rejected: [Ban, 'var(--ink-3)'], order: [Send, 'var(--up)'], failed: [CircleX, 'var(--down)'], signup: [UserPlus, '#8b5cf6'],
+  signal: [Radio, 'var(--brand)'], rejected: [Ban, 'var(--ink-3)'], order: [Send, 'var(--up)'], failed: [CircleX, 'var(--down)'], signup: [UserPlus, 'var(--violet)'],
 }
 
 export default function AdminOverview() {
@@ -184,7 +184,7 @@ export default function AdminOverview() {
       <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
         <Kpi icon={Radio} label="Signals parsed" value={String(d.now.signals)} delta={<Delta now={d.now.signals} before={d.before.signals} />} spark={col('signals')} color="var(--brand)" foot={parseRate != null ? `${parseRate}% of ${d.now.signals + d.now.rejected} posts were signals` : 'No posts in this period'} />
         <Kpi icon={Send} label="Orders executed" value={String(d.now.executed)} delta={<Delta now={d.now.executed} before={d.before.executed} />} spark={col('executed')} color="var(--up)" foot={`${d.now.failed} failed · ${d.totals.open_positions} positions open now`} />
-        <Kpi icon={Gauge} label="Copy speed (p50)" value={d.now.p50 != null ? String(d.now.p50) : '—'} unit={d.now.p50 != null ? 'ms' : undefined} delta={<Delta now={d.now.p50} before={d.before.p50} lowerIsBetter />} spark={col('p50')} color="#8b5cf6" foot={d.latency.p95 != null ? `p95 ${d.latency.p95} ms, signal post → broker order` : 'signal post → broker order'} />
+        <Kpi icon={Gauge} label="Copy speed (p50)" value={d.now.p50 != null ? String(d.now.p50) : '—'} unit={d.now.p50 != null ? 'ms' : undefined} delta={<Delta now={d.now.p50} before={d.before.p50} lowerIsBetter />} spark={col('p50')} color="var(--violet)" foot={d.latency.p95 != null ? `p95 ${d.latency.p95} ms, signal post → broker order` : 'signal post → broker order'} />
         <Kpi icon={Users} label="New customers" value={String(d.now.signups)} delta={<Delta now={d.now.signups} before={d.before.signups} />} spark={col('signups')} color="var(--warn)" foot={`${d.totals.users} total · ${d.now.active} traded in this period`} />
       </div>
 

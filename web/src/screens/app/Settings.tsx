@@ -1,12 +1,12 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { ChevronRight, CreditCard, LogOut, Mail, Send, Shield, Wallet } from 'lucide-react'
-import type { ReactNode } from 'react'
+import { ChevronRight, CreditCard, KeyRound, LogOut, Mail, Send, Shield, Wallet } from 'lucide-react'
+import { useState, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router'
 import { Page, Section } from '../../components/AppShell'
 import { PlanCard, ThemeSwitch } from '../../components/Plan'
 import { InstallCard } from '../../components/Install'
-import { Card, Toggle } from '../../components/ui'
-import { api, post, put, settle } from '../../lib/api'
+import { Button, Card, ErrorNote, Field, Toggle } from '../../components/ui'
+import { api, ApiError, post, put, settle } from '../../lib/api'
 import { isAdmin, useSession } from '../../lib/session'
 import type { TgStatus } from '../../lib/types'
 
@@ -24,6 +24,61 @@ function Row({ icon, title, sub, right, to }: { icon: ReactNode; title: string; 
     </>
   )
   return <li>{to ? <Link to={to} className="flex items-center gap-3 py-3">{body}</Link> : <div className="flex items-center gap-3 py-3">{body}</div>}</li>
+}
+
+/** Change password while signed in. A "your password was changed" email follows. */
+function PasswordCard() {
+  const [open, setOpen] = useState(false)
+  const [current, setCurrent] = useState('')
+  const [next, setNext] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [done, setDone] = useState(false)
+  const [err, setErr] = useState<ApiError | null>(null)
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault()
+    setBusy(true)
+    setErr(null)
+    try {
+      await put('settings/password', { current_password: current, password: next })
+      setDone(true)
+      setOpen(false)
+      setCurrent('')
+      setNext('')
+    } catch (e) {
+      setErr(e as ApiError)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  if (!open)
+    return (
+      <Card className="py-0">
+        <ul>
+          <Row
+            icon={<KeyRound className="size-5" />}
+            title="Password"
+            sub={done ? 'Changed. We emailed you a confirmation.' : 'Change the password you sign in with'}
+            right={<button className="text-sm font-semibold text-brand" onClick={() => { setOpen(true); setDone(false) }}>Change</button>}
+          />
+        </ul>
+      </Card>
+    )
+  return (
+    <Card>
+      <form onSubmit={submit} className="space-y-3">
+        <Field label="Current password" type="password" autoComplete="current-password" value={current} onChange={(e) => setCurrent(e.target.value)} error={err?.field('current_password')} required />
+        <Field label="New password" type="password" autoComplete="new-password" value={next} onChange={(e) => setNext(e.target.value)} error={err?.field('password')} hint="At least 8 characters." required />
+        {err && !Object.keys(err.errors).length && <ErrorNote>{err.message}</ErrorNote>}
+        <div className="flex flex-wrap items-center gap-2">
+          <Button type="submit" busy={busy}>Save new password</Button>
+          <Button type="button" variant="ghost" onClick={() => { setOpen(false); setErr(null) }}>Cancel</Button>
+          <Link to="/forgot-password" className="ml-auto text-sm font-semibold text-brand">Forgot it?</Link>
+        </div>
+      </form>
+    </Card>
+  )
 }
 
 export default function Settings() {
@@ -46,6 +101,10 @@ export default function Settings() {
           <span className="block truncate text-sm text-ink-3">{user?.email}</span>
         </span>
       </Card>
+
+      <Section title="Sign-in">
+        <PasswordCard />
+      </Section>
 
       <Section title="Your plan">
         <PlanCard plan={user?.plan} />

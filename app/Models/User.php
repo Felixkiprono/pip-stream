@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Models\Concerns\HasPrefixedId;
 use App\Notifications\ResetPassword;
+use App\Pipstream\Accounts;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
@@ -37,7 +38,7 @@ class User extends Authenticatable
 
     public function sendPasswordResetNotification(#[\SensitiveParameter] $token): void
     {
-        $this->notify(new ResetPassword($token));
+        Accounts::mailNow($this, new ResetPassword($token));
     }
 
     /** RESEND_TEST_TO / Admin → Email "send all mail to": testing before the domain is verified (as in NanoDeploi). */

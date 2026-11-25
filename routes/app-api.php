@@ -76,6 +76,7 @@ Route::middleware(['auth', 'active'])->group(function () {
     Route::post('billing/checkout', [BillingController::class, 'checkout']);
     Route::get('settings', [SettingsController::class, 'show']);
     Route::put('settings', [SettingsController::class, 'update']);
+    Route::put('settings/password', [SettingsController::class, 'password'])->middleware('throttle:auth');
     Route::post('settings/telegram-alerts', [SettingsController::class, 'telegramAlerts']);
 
     // ------------------------------------------------------------ admin

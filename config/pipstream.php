@@ -15,6 +15,10 @@ return [
     // The address the PipStream EA calls. Empty: the address the customer downloaded it from.
     'ea_url' => env('PS_EA_URL'),
 
+    // Where links in emails point (password reset, welcome). Empty: APP_URL. In production a
+    // local APP_URL falls back to https://pips.stream (App\Pipstream\PublicUrl).
+    'public_url' => env('PS_PUBLIC_URL'),
+
     // Redis without an ACL file (NanoDeploi's managed Redis): `php artisan pipstream:redis-user`
     // logs in with the host's own Redis password and creates Laravel's ACL user "laravel"
     // (rules in resources/redis/laravel.acl, generated from the engine's permissions.py).

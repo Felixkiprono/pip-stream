@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\User;
+use App\Notifications\PasswordChanged;
 use App\Pipstream\Accounts;
 use Illuminate\Auth\Events\PasswordReset;
 use Illuminate\Http\Request;
@@ -95,8 +96,11 @@ class AuthController extends Controller
         ]);
         $data['email'] = strtolower($data['email']);
         $status = PasswordBroker::reset($data, function (User $user, string $password) {
-            $user->forceFill(['password' => $password, 'remember_token' => Str::random(60)])->save();
+            // the link came through their inbox, so the address is theirs
+            $user->forceFill(['password' => $password, 'remember_token' => Str::random(60),
+                'email_verified_at' => $user->email_verified_at ?? now()])->save();
             event(new PasswordReset($user));
+            Accounts::mailNow($user, new PasswordChanged('reset'));
         });
         if ($status !== PasswordBroker::PASSWORD_RESET) {
             throw ValidationException::withMessages(['email' => 'This reset link is invalid or has expired. Ask for a new one.']);

@@ -2,13 +2,14 @@
 
 namespace App\Notifications;
 
+use App\Pipstream\PublicUrl;
 use Illuminate\Bus\Queueable;
-use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 
-/** Sent once after sign-up. Founding members are told what they got. Transactional. */
-class Welcome extends Notification implements ShouldQueue
+/** Sent once after sign-up, straight from the web process (Accounts::mailNow), not the queue.
+ *  Founding members are told what they got. Transactional. */
+class Welcome extends Notification
 {
     use Queueable;
 
@@ -33,7 +34,7 @@ class Welcome extends Notification implements ShouldQueue
         }
 
         return $m->line('Next: link your Telegram, pick the channels to copy and choose a copy style. It takes about two minutes.')
-            ->action('Finish setting up', url('/start/telegram'))
+            ->action('Finish setting up', PublicUrl::to('/start/telegram'))
             ->salutation('Happy trading, the PipStream team');
     }
 }

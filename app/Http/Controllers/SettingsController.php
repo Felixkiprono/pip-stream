@@ -2,10 +2,13 @@
 
 namespace App\Http\Controllers;
 
+use App\Notifications\PasswordChanged;
+use App\Pipstream\Accounts;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rules\Password;
 
 class SettingsController extends Controller
 {
@@ -36,6 +39,22 @@ class SettingsController extends Controller
         }
 
         return $this->show($r);
+    }
+
+    /** Change the password while signed in: needs the current one; emails a "password changed" note. */
+    public function password(Request $r)
+    {
+        $d = $r->validate([
+            'current_password' => ['required', 'string', 'current_password'],
+            'password' => ['required', 'string', Password::min(8), 'different:current_password'],
+        ], ['current_password.current_password' => 'That isn\'t your current password.',
+            'password.different' => 'Pick a password you aren\'t using now.']);
+        $u = $r->user();
+        $u->forceFill(['password' => $d['password'], 'remember_token' => Str::random(60)])->save();
+        $r->session()->regenerate();
+        Accounts::mailNow($u, new PasswordChanged('settings'));
+
+        return ['ok' => true];
     }
 
     /** One tap: opens the PipStream bot in Telegram with a one-time token; the bot's webhook

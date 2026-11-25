@@ -2,6 +2,7 @@
 
 namespace App\Notifications;
 
+use App\Pipstream\PublicUrl;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
@@ -41,7 +42,7 @@ class Connected extends Notification implements ShouldQueue
             $m->line($l);
         }
 
-        return $m->action($cta, url($path))
+        return $m->action($cta, PublicUrl::to($path))
             ->line('If this wasn\'t you, sign in and disconnect it in Settings, then change your password.');
     }
 }

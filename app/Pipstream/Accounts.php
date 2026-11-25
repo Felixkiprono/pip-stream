@@ -10,6 +10,7 @@ use App\Models\CopyRule;
 use App\Models\TelegramAccount;
 use App\Models\User;
 use App\Notifications\Welcome;
+use Illuminate\Notifications\Notification;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Throwable;
@@ -38,7 +39,7 @@ class Accounts
             $this->grantLifetime($user);
         }
         if (! $quiet) {
-            self::safely(fn () => $user->notify(new Welcome($founding)));
+            self::mailNow($user, new Welcome($founding));
         }
     }
 
@@ -91,6 +92,25 @@ class Accounts
     }
 
     /** Email and the engine bus must never break sign-up, linking or a migration. */
+    /**
+     * Account emails (welcome, password reset, password changed) go out from the web process
+     * right after the response is sent, through the mailer set in Admin → Email. They never wait
+     * on the queue worker, a Resend error can't break sign-up or the reset form, and a forgot-
+     * password request takes the same time whether or not the email has an account.
+     */
+    public static function mailNow(object $notifiable, Notification $notification): void
+    {
+        $send = function () use ($notifiable, $notification) {
+            try {
+                MailSettings::apply();
+                $notifiable->notifyNow($notification);
+            } catch (Throwable $e) {
+                Log::error('account email failed', ['email' => class_basename($notification), 'error' => mb_substr($e->getMessage(), 0, 300)]);
+            }
+        };
+        app()->runningInConsole() ? $send() : \Illuminate\Support\defer($send);
+    }
+
     public static function safely(callable $fn): void
     {
         try {

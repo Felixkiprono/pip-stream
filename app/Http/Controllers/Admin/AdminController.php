@@ -10,6 +10,7 @@ use App\Models\User;
 use App\Pipstream\Bus;
 use App\Pipstream\KillSwitch;
 use App\Pipstream\MailSettings;
+use App\Pipstream\PublicUrl;
 use App\Pipstream\TelegramLink;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -259,6 +260,10 @@ class AdminController extends Controller
         $add('Web app', 'Email (Resend)', $mail['source'] === 'none' ? 'warn' : 'ok', $mail['source'] === 'none'
             ? 'no Resend API key: set it in Admin → Email (password resets and welcome emails are not sent)'
             : "key {$mail['key_hint']} from ".($mail['source'] === 'admin' ? 'Admin → Email' : '.env').", sending as {$mail['from_address']}");
+        if ($mail['test_to']) {
+            $add('Web app', 'Email recipients', 'warn', "every email goes to {$mail['test_to']} (testing): customers don't get their own password reset or welcome emails. Clear \"send all mail to\" in Admin → Email.");
+        }
+        $add('Web app', 'Links in emails', str_starts_with(PublicUrl::base(), 'https://') || config('app.env') !== 'production' ? 'ok' : 'fail', PublicUrl::base());
         $slots = (int) config('pipstream.founding_slots');
         $taken = User::whereNotNull('founding_number')->count();
         $add('Web app', 'Founding members', 'ok', "{$taken} of {$slots} free-for-life spots taken");

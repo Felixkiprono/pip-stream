@@ -26,7 +26,7 @@ class AccountEmailsTest extends TestCase
     public function test_signup_sends_welcome_right_away_and_signs_in(): void
     {
         Notification::fake();
-        $this->postJson('/api/v1/auth/register', ['name' => 'Akinyi Otieno', 'email' => 'Akinyi@Example.com', 'password' => 'long-enough-1'])
+        $this->postJson('/api/v1/auth/register', ['name' => 'Akinyi Otieno', 'email' => 'Akinyi@Example.com', 'password' => 'long-enough-1', 'accept_terms' => true])
             ->assertOk()->assertJsonPath('user.email', 'akinyi@example.com');
         $u = User::where('email', 'akinyi@example.com')->firstOrFail();
         Notification::assertSentTo($u, Welcome::class, fn ($n, $channels) => $channels === ['mail']
@@ -36,7 +36,7 @@ class AccountEmailsTest extends TestCase
 
         // the same address again is refused, any casing
         $this->postJson('/api/v1/auth/logout');
-        $this->postJson('/api/v1/auth/register', ['name' => 'X', 'email' => 'akinyi@example.com', 'password' => 'long-enough-1'])->assertStatus(422);
+        $this->postJson('/api/v1/auth/register', ['name' => 'X', 'email' => 'akinyi@example.com', 'password' => 'long-enough-1', 'accept_terms' => true])->assertStatus(422);
     }
 
     public function test_login_any_email_casing_and_wrong_password_and_suspended(): void

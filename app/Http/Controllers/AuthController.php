@@ -55,9 +55,13 @@ class AuthController extends Controller
             'name' => ['required', 'string', 'max:80'],
             'email' => ['required', 'email', 'max:190', 'unique:users,email'],
             'password' => ['required', Password::min(8)],
-        ]);
+            'accept_terms' => ['accepted'],
+        ], ['accept_terms.accepted' => 'Please accept the Terms, Privacy Policy and Risk Disclosure to continue.']);
+        unset($data['accept_terms']);
         $data['email'] = strtolower($data['email']);
         $user = User::create($data + ['role' => 'customer']);
+        // what they agreed to and when: kept as the record of acceptance
+        $user->forceFill(['terms_version' => config('pipstream.terms_version'), 'terms_accepted_at' => now(), 'terms_accepted_ip' => $r->ip()])->save();
         $accounts->onboard($user);
         Visitors::claim($r, $user->id);
         Auth::login($user, remember: true);

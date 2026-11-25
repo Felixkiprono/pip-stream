@@ -11,13 +11,28 @@ class AuthAndAccessTest extends TestCase
 
     public function test_register_gives_practice_account_and_trial(): void
     {
-        $res = $this->postJson('/api/v1/auth/register', ['name' => 'Otieno', 'email' => 'otieno@example.com', 'password' => 'long-enough-1']);
+        $res = $this->postJson('/api/v1/auth/register', ['name' => 'Otieno', 'email' => 'otieno@example.com', 'password' => 'long-enough-1', 'accept_terms' => true]);
         $res->assertOk()->assertJsonPath('user.role', 'customer')
             ->assertJsonPath('user.onboarding.steps.telegram', false);
         $this->assertStringStartsWith('usr_', $res->json('user.id'));
         $this->getJson('/api/v1/brokers')->assertJsonPath('brokers.0.connector', 'paper')
             ->assertJsonPath('brokers.0.connected', true);
         $this->getJson('/api/v1/billing')->assertJsonPath('current.status', 'trialing')->assertJsonPath('current.entitled', true);
+    }
+
+    public function test_register_needs_terms_accepted_and_records_version(): void
+    {
+        $this->postJson('/api/v1/auth/register', ['name' => 'Otieno', 'email' => 'otieno@example.com', 'password' => 'long-enough-1'])
+            ->assertStatus(422)->assertJsonValidationErrors('accept_terms');
+        $this->postJson('/api/v1/auth/register', ['name' => 'Otieno', 'email' => 'otieno@example.com', 'password' => 'long-enough-1', 'accept_terms' => false])
+            ->assertStatus(422)->assertJsonValidationErrors('accept_terms');
+        $this->assertDatabaseMissing('users', ['email' => 'otieno@example.com']);
+
+        $this->postJson('/api/v1/auth/register', ['name' => 'Otieno', 'email' => 'otieno@example.com', 'password' => 'long-enough-1', 'accept_terms' => true])->assertOk();
+        $u = \App\Models\User::where('email', 'otieno@example.com')->first();
+        $this->assertSame(config('pipstream.terms_version'), $u->terms_version);
+        $this->assertNotNull($u->terms_accepted_at);
+        $this->assertNotNull($u->terms_accepted_ip);
     }
 
     public function test_login_logout_and_bad_password(): void

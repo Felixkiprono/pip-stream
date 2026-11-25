@@ -9,6 +9,7 @@ import { Link, Navigate } from 'react-router'
 import { BetaPill, ThemeButton } from '../components/Plan'
 import { Logo } from '../components/ui'
 import { api, post } from '../lib/api'
+import { legalLinks } from './Legal'
 import { isAdmin, nextStep, useSession } from '../lib/session'
 
 /** "7 of 10 founding spots left": the first members are free for life. Hidden once they're gone. */
@@ -588,8 +589,13 @@ function Footer() {
     <footer className="border-t border-line safe-bottom">
       <div className="mx-auto flex max-w-6xl flex-col gap-3 px-5 py-8 text-sm text-ink-3 md:flex-row md:items-center md:justify-between">
         <span className="flex items-center gap-2"><Logo size={20} /> © {new Date().getFullYear()} · pips.stream</span>
-        <span className="max-w-[60ch]">Trading involves risk of loss. PipStream copies signals you choose and does not give financial advice.</span>
+        <nav className="flex flex-wrap gap-x-5 gap-y-2 font-semibold text-ink-2" aria-label="Legal">
+          {legalLinks.map(([d, label]) => <Link key={d} to={`/${d}`} className="hover:text-ink">{label}</Link>)}
+        </nav>
       </div>
+      <p className="mx-auto max-w-6xl px-5 pb-8 text-sm text-ink-3">
+        Trading forex, gold and CFDs is high risk and you can lose all your money. PipStream copies signals you choose and does not give financial advice.
+      </p>
     </footer>
   )
 }

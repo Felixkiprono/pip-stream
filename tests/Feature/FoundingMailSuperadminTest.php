@@ -23,7 +23,7 @@ class FoundingMailSuperadminTest extends TestCase
 
     private function register(string $email)
     {
-        return $this->postJson('/api/v1/auth/register', ['name' => 'Akinyi Otieno', 'email' => $email, 'password' => 'long-enough-1']);
+        return $this->postJson('/api/v1/auth/register', ['name' => 'Akinyi Otieno', 'email' => $email, 'password' => 'long-enough-1', 'accept_terms' => true]);
     }
 
     public function test_first_customers_are_founding_members_for_life(): void

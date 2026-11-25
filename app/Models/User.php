@@ -22,7 +22,7 @@ class User extends Authenticatable
 
     protected function casts(): array
     {
-        return ['email_verified_at' => 'datetime', 'password' => 'hashed', 'kill_switch' => 'boolean', 'founding_number' => 'integer', 'last_seen_at' => 'datetime'];
+        return ['email_verified_at' => 'datetime', 'password' => 'hashed', 'kill_switch' => 'boolean', 'founding_number' => 'integer', 'last_seen_at' => 'datetime', 'terms_accepted_at' => 'datetime'];
     }
 
     public function isAdmin(): bool

@@ -37,6 +37,22 @@ PS_INGESTOR_FAKE_TELEGRAM=1 PS_INGESTOR_SOURCE=replay pipstream run engine
 With `PS_INGESTOR_FAKE_TELEGRAM=1` the Telegram screens accept code **12345** (or 11111, then
 password `demo`, to see the two-step screen). Never set it in production.
 
+## Safety nets
+
+- **Duplicate signals:** a rule copies a post once. The same channel + symbol + side + levels posted
+  again within 30 minutes is skipped (`PS_RISK_DUPLICATE_WINDOW_S`, or `limits.duplicate_window_min`
+  on a rule; 0 turns it off). An edit of a post that was already copied only moves SL/TP, and an
+  "edit" that changes nothing in the text is ignored.
+- **Order retries:** a modify or close that failed because MetaTrader was offline, the network
+  dropped or no answer came back is tried again after 5, 15, 45 and 120 s
+  (`PS_ROUTER_FOLLOWUP_RETRY_S`). Opens are never re-sent after their 5 s window. The EAs (1.14)
+  retry a requote, a moved price or a busy server on the spot, and MT5 falls back through filling modes.
+- **Watchdog:** `php artisan pipstream:watchdog` runs every minute in the `scheduler` service. It
+  opens an incident (Admin → System) and emails `PS_ALERT_EMAILS` (default: the superadmin) when
+  the event consumer, the queue worker or an engine worker stops, orders or web errors spike, or a
+  customer's MetaTrader stops checking in for 3 minutes (the customer is told too). It emails again
+  on recovery. The hourly queue-worker restart and the first 5 minutes after a deploy never alert.
+
 ## Tests
 
 ```bash

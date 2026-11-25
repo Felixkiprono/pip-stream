@@ -22,7 +22,7 @@ input string PipStreamUrl = PS_DEFAULT_URL;  // Server (add it under Tools > Opt
 input int    SlippagePoints = 30;                  // Max slippage for market orders, in points
 
 #define PS_MAGIC 770077
-#define PS_VERSION "1.13"
+#define PS_VERSION "1.14"
 #define PS_KEY_FILE "PipStream.key"
 #define PS_CODE_LABEL "PipStreamPairCode"
 
@@ -139,6 +139,14 @@ void MarkDone(const string id)
    }
    ArrayResize(g_done, n + 1);
    g_done[n] = id;
+}
+
+// Errors where the order was not placed and the same request can be sent again a moment later:
+// server busy (4), price changed (135), off quotes (136), broker busy (137), requote (138),
+// trade context busy (146). A timeout (128) is NOT here: that order may have been filled.
+bool Busy(const int e)
+{
+   return(e == 4 || e == 135 || e == 136 || e == 137 || e == 138 || e == 146);
 }
 
 void AddResult(const string id, const bool ok, const int ticket, const double price, const double volume,
@@ -627,13 +635,29 @@ void Execute(const string line)
          cmd = (side == "buy") ? OP_BUY : OP_SELL;
          at = (side == "buy") ? MarketInfo(symbol, MODE_ASK) : MarketInfo(symbol, MODE_BID);
       }
-      ResetLastError();
-      // Send without stops first, then add them: works on brokers that reject SL/TP on market orders
-      int t = OrderSend(symbol, cmd, volume, at, SlippagePoints, 0, 0, "PipStream " + comment, PS_MAGIC, 0, clrNONE);
+      int t = -1;
+      int err = 0;
+      for(int attempt = 0; attempt < 4; attempt++)
+      {
+         ResetLastError();
+         // Send without stops first, then add them: works on brokers that reject SL/TP on market orders
+         t = OrderSend(symbol, cmd, volume, at, SlippagePoints, 0, 0, "PipStream " + comment, PS_MAGIC, 0, clrNONE);
+         if(t >= 0)
+            break;
+         err = GetLastError();
+         if(!Busy(err))
+            break;
+         // requote, price moved or the server was busy: nothing was opened, so try again at the new price
+         Sleep(300);
+         RefreshRates();
+         if(cmd == OP_BUY)
+            at = MarketInfo(symbol, MODE_ASK);
+         else if(cmd == OP_SELL)
+            at = MarketInfo(symbol, MODE_BID);
+      }
       if(t < 0)
       {
-         int e = GetLastError();
-         AddResult(id, false, 0, 0, 0, e, ErrText(e));
+         AddResult(id, false, 0, 0, 0, err, ErrText(err));
          return;
       }
       double fill = at;
@@ -701,8 +725,28 @@ void Execute(const string line)
       if(step > 0)
          lots = MathMax(MarketInfo(OrderSymbol(), MODE_MINLOT), MathFloor(lots / step + 0.0000001) * step);
       double at = (OrderType() == OP_BUY) ? MarketInfo(OrderSymbol(), MODE_BID) : MarketInfo(OrderSymbol(), MODE_ASK);
-      ResetLastError();
-      if(OrderClose(t, lots, at, SlippagePoints, clrNONE))
+      bool closed = false;
+      int cerr = 0;
+      for(int attempt = 0; attempt < 4 && !closed; attempt++)
+      {
+         if(attempt > 0)
+         {
+            Sleep(300);
+            RefreshRates();
+            if(!OrderSelect(t, SELECT_BY_TICKET))
+               break;
+            at = (OrderType() == OP_BUY) ? MarketInfo(OrderSymbol(), MODE_BID) : MarketInfo(OrderSymbol(), MODE_ASK);
+         }
+         ResetLastError();
+         closed = OrderClose(t, lots, at, SlippagePoints, clrNONE);
+         if(!closed)
+         {
+            cerr = GetLastError();
+            if(!Busy(cerr))
+               break;
+         }
+      }
+      if(closed)
       {
          int rest = (lots < have) ? FindTicket(t) : 0;
          double closed_at = at;
@@ -711,10 +755,7 @@ void Execute(const string line)
          AddResult(id, true, t, closed_at, lots, 0, "", rest > 0 ? rest : 0);
       }
       else
-      {
-         int e = GetLastError();
-         AddResult(id, false, t, 0, 0, e, ErrText(e));
-      }
+         AddResult(id, false, t, 0, 0, cerr, ErrText(cerr));
       return;
    }
    AddResult(id, false, 0, 0, 0, 0, "unknown action " + action);

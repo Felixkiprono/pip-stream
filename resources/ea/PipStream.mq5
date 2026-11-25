@@ -22,7 +22,7 @@ input string PipStreamUrl = PS_DEFAULT_URL;  // Server (add it under Tools > Opt
 input int    SlippagePoints = 30;                  // Max slippage for market orders, in points
 
 #define PS_MAGIC 770077
-#define PS_VERSION "1.13"
+#define PS_VERSION "1.14"
 #define PS_KEY_FILE "PipStream.key"
 #define PS_CODE_LABEL "PipStreamPairCode"
 
@@ -156,6 +156,23 @@ void AddResult(const string id, const bool ok, const ulong ticket, const double 
 bool RetOk(const uint rc)
 {
    return(rc == TRADE_RETCODE_DONE || rc == TRADE_RETCODE_PLACED || rc == TRADE_RETCODE_DONE_PARTIAL);
+}
+
+// Requote, price changed or no prices: the order was not filled, so it can be sent again.
+// A timeout or lost connection is NOT here: that order may have been filled.
+bool Requote(const uint rc)
+{
+   return(rc == TRADE_RETCODE_REQUOTE || rc == TRADE_RETCODE_PRICE_CHANGED || rc == TRADE_RETCODE_PRICE_OFF);
+}
+
+// Filling modes to fall back to when the broker rejects the one the symbol reported
+ENUM_ORDER_TYPE_FILLING FillingAt(const int i)
+{
+   if(i == 0)
+      return(ORDER_FILLING_FOK);
+   if(i == 1)
+      return(ORDER_FILLING_IOC);
+   return(ORDER_FILLING_RETURN);
 }
 
 //+------------------------------------------------------------------+
@@ -579,8 +596,24 @@ void Execute(const string line)
          sent = (side == "buy") ? g_trade.BuyStop(volume, price, symbol, sl, tp, ORDER_TIME_GTC, 0, c)
                                 : g_trade.SellStop(volume, price, symbol, sl, tp, ORDER_TIME_GTC, 0, c);
       else
-         sent = (side == "buy") ? g_trade.Buy(volume, symbol, 0, sl, tp, c)
-                                : g_trade.Sell(volume, symbol, 0, sl, tp, c);
+      {
+         int fill = 0;
+         for(int attempt = 0; attempt < 5; attempt++)
+         {
+            sent = (side == "buy") ? g_trade.Buy(volume, symbol, 0, sl, tp, c)
+                                   : g_trade.Sell(volume, symbol, 0, sl, tp, c);
+            uint r0 = g_trade.ResultRetcode();
+            if(r0 == TRADE_RETCODE_INVALID_FILL && fill < 3)
+            {
+               g_trade.SetTypeFilling(FillingAt(fill));  // broker refused the filling mode: try the next
+               fill++;
+               continue;
+            }
+            if(!Requote(r0))
+               break;
+            Sleep(300);  // requote or price moved: nothing was filled, send again at the new price
+         }
+      }
       uint rc = g_trade.ResultRetcode();
       bool ok = sent && RetOk(rc);
       // for a market order the position id equals the opening order ticket
@@ -618,13 +651,24 @@ void Execute(const string line)
       }
       double have = PositionGetDouble(POSITION_VOLUME);
       g_trade.SetTypeFillingBySymbol(PositionGetString(POSITION_SYMBOL));
-      bool sent;
-      if(volume > 0 && volume < have)
-         sent = g_trade.PositionClosePartial(ticket, volume);
-      else
-      {
-         sent = g_trade.PositionClose(ticket);
+      bool sent = false;
+      bool partial = (volume > 0 && volume < have);
+      if(!partial)
          volume = have;
+      int fill = 0;
+      for(int attempt = 0; attempt < 5; attempt++)
+      {
+         sent = partial ? g_trade.PositionClosePartial(ticket, volume) : g_trade.PositionClose(ticket);
+         uint r0 = g_trade.ResultRetcode();
+         if(r0 == TRADE_RETCODE_INVALID_FILL && fill < 3)
+         {
+            g_trade.SetTypeFilling(FillingAt(fill));
+            fill++;
+            continue;
+         }
+         if(!Requote(r0) || !PositionSelectByTicket(ticket))
+            break;
+         Sleep(300);
       }
       uint rc = g_trade.ResultRetcode();
       bool ok = sent && RetOk(rc);

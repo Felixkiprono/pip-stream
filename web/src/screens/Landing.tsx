@@ -8,7 +8,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { Link, Navigate } from 'react-router'
 import { BetaPill, ThemeButton } from '../components/Plan'
 import { Logo } from '../components/ui'
-import { api } from '../lib/api'
+import { api, post } from '../lib/api'
 import { isAdmin, nextStep, useSession } from '../lib/session'
 
 /** "7 of 10 founding spots left": the first members are free for life. Hidden once they're gone. */
@@ -22,9 +22,25 @@ function FoundingSpots() {
   )
 }
 
+/** Count this landing page view once per page load (IP and place are worked out on the server). */
+function useVisit(enabled: boolean) {
+  useEffect(() => {
+    if (!enabled || sessionStorageGet('ps_visit_sent') === location.pathname + location.search) return
+    sessionStorageSet('ps_visit_sent', location.pathname + location.search)
+    const u = new URLSearchParams(location.search)
+    post('visit', {
+      path: location.pathname + location.search, referrer: document.referrer || null,
+      utm_source: u.get('utm_source'), utm_medium: u.get('utm_medium'), utm_campaign: u.get('utm_campaign'),
+    }).catch(() => {})
+  }, [enabled])
+}
+function sessionStorageGet(k: string) { try { return sessionStorage.getItem(k) } catch { return null } }
+function sessionStorageSet(k: string, v: string) { try { sessionStorage.setItem(k, v) } catch { /* private mode */ } }
+
 /** pips.stream public landing page. Signed-in people go straight to their app. */
 export default function Landing() {
-  const { user } = useSession()
+  const { user, loading } = useSession()
+  useVisit(!user && !loading)
   if (user) return <Navigate to={isAdmin(user) ? '/admin' : nextStep(user)} replace />
 
   return (

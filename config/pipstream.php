@@ -62,4 +62,9 @@ return [
     // New customers start here
     'default_plan' => env('PS_DEFAULT_PLAN', 'trial'),
     'trial_days' => (int) env('PS_TRIAL_DAYS', 14),
+
+    // Landing page visitors: location from the visitor's IP. Uses Cloudflare's country header when
+    // present, otherwise ipinfo.io (token optional, free tier 50k lookups a month). '' turns lookups off.
+    'geo_provider' => env('PS_GEO_PROVIDER', 'ipinfo'),
+    'ipinfo_token' => env('PS_IPINFO_TOKEN'),
 ];

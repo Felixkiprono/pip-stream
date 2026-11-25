@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\User;
 use App\Notifications\PasswordChanged;
 use App\Pipstream\Accounts;
+use App\Pipstream\Visitors;
 use Illuminate\Auth\Events\PasswordReset;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -58,6 +59,7 @@ class AuthController extends Controller
         $data['email'] = strtolower($data['email']);
         $user = User::create($data + ['role' => 'customer']);
         $accounts->onboard($user);
+        Visitors::claim($r, $user->id);
         Auth::login($user, remember: true);
         $r->session()->regenerate();
 

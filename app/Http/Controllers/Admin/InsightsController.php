@@ -231,6 +231,63 @@ class InsightsController extends Controller
         ];
     }
 
+    /** Landing page visitors: one row per visitor (browser session), with IP, place, device and whether they signed up. */
+    public function visitors(Request $req)
+    {
+        $d = $req->validate(['days' => ['nullable', 'integer', 'in:1,7,30,90'], 'q' => ['nullable', 'string', 'max:100'], 'country' => ['nullable', 'string', 'size:2']]);
+        $days = (int) ($d['days'] ?? 7);
+        $from = $days === 1 ? now()->subDay() : now()->startOfDay()->subDays($days - 1);
+        $base = fn () => DB::table('landing_visits')->where('landing_visits.created_at', '>=', $from);
+
+        $sum = $base()->selectRaw('count(*) as views, count(distinct visitor_id) as visitors, count(distinct ip) as ips,
+            count(distinct visitor_id) filter (where user_id is not null) as signed_up')->first();
+        $group = fn (string $col, int $n = 8) => $base()->selectRaw("coalesce({$col}, '') as k, count(distinct visitor_id) as n")
+            ->groupBy('k')->orderByDesc('n')->limit($n)->get()->map(fn ($r) => ['key' => $r->k, 'n' => (int) $r->n]);
+        $series = collect(DB::select(<<<'SQL'
+            with b as (select generate_series(date_trunc('day', :f::timestamptz), date_trunc('day', now()), interval '1 day') as t)
+            select b.t,
+              (select count(distinct visitor_id) from landing_visits where date_trunc('day', created_at) = b.t) as visitors,
+              (select count(*) from landing_visits where date_trunc('day', created_at) = b.t) as views
+            from b order by b.t
+            SQL, ['f' => $from->toIso8601String()]))->map(fn ($x) => ['t' => $x->t, 'visitors' => (int) $x->visitors, 'views' => (int) $x->views]);
+
+        $q = $base()->leftJoin('users', 'users.id', '=', 'landing_visits.user_id')
+            ->groupBy('landing_visits.visitor_id')
+            ->selectRaw("landing_visits.visitor_id,
+                (array_agg(landing_visits.ip order by landing_visits.id desc))[1] as ip,
+                (array_agg(landing_visits.country order by landing_visits.id desc) filter (where landing_visits.country is not null))[1] as country,
+                (array_agg(landing_visits.region order by landing_visits.id desc) filter (where landing_visits.region is not null))[1] as region,
+                (array_agg(landing_visits.city order by landing_visits.id desc) filter (where landing_visits.city is not null))[1] as city,
+                (array_agg(landing_visits.org order by landing_visits.id desc) filter (where landing_visits.org is not null))[1] as org,
+                (array_agg(landing_visits.device order by landing_visits.id))[1] as device,
+                (array_agg(landing_visits.browser order by landing_visits.id))[1] as browser,
+                (array_agg(landing_visits.os order by landing_visits.id))[1] as os,
+                (array_agg(landing_visits.referrer_host order by landing_visits.id) filter (where landing_visits.referrer_host is not null))[1] as referrer,
+                (array_agg(landing_visits.utm_source order by landing_visits.id) filter (where landing_visits.utm_source is not null))[1] as utm_source,
+                max(users.id) as user_id, max(users.email) as email,
+                count(*) as views, count(distinct landing_visits.ip) as ips, min(landing_visits.created_at) as first_seen, max(landing_visits.created_at) as last_seen")
+            ->orderByDesc('last_seen');
+        if ($s = trim($d['q'] ?? '')) {
+            $q->havingRaw('bool_or(landing_visits.ip ilike ? or landing_visits.city ilike ? or landing_visits.referrer_host ilike ? or users.email ilike ?)', array_fill(0, 4, "%{$s}%"));
+        }
+        if (! empty($d['country'])) {
+            $q->havingRaw('bool_or(landing_visits.country = ?)', [strtoupper($d['country'])]);
+        }
+
+        return [
+            'days' => $days,
+            'summary' => ['views' => (int) $sum->views, 'visitors' => (int) $sum->visitors, 'ips' => (int) $sum->ips, 'signed_up' => (int) $sum->signed_up,
+                'all_time' => DB::table('landing_visits')->distinct()->count('visitor_id')],
+            'series' => $series,
+            'countries' => $group('landing_visits.country'),
+            'referrers' => $group('landing_visits.referrer_host'),
+            'devices' => $group('landing_visits.device', 3),
+            'browsers' => $group('landing_visits.browser', 6),
+            'geo' => ['provider' => config('pipstream.geo_provider') ?: null, 'token' => (bool) config('pipstream.ipinfo_token')],
+            'rows' => $q->limit(300)->get()->map(fn ($r) => array_merge((array) $r, ['views' => (int) $r->views, 'ips' => (int) $r->ips])),
+        ];
+    }
+
     /** Postgres doubles can arrive as strings: send numbers. */
     private function numbers(array $row, array $keys): array
     {

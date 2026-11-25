@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import clsx from 'clsx'
-import { Activity, BarChart3, Landmark, ArrowLeftRight, CheckCircle2, CircleAlert, CircleX, FlaskConical, Inbox, OctagonX, Play, Radio, ScrollText, Search, Send, Server, Users, Menu, X, ChevronRight, ArrowLeft, Crown, Mail, Award } from 'lucide-react'
+import { Activity, Globe, BarChart3, Landmark, ArrowLeftRight, CheckCircle2, CircleAlert, CircleX, FlaskConical, Inbox, OctagonX, Play, Radio, ScrollText, Search, Send, Server, Users, Menu, X, ChevronRight, ArrowLeft, Crown, Mail, Award } from 'lucide-react'
 import { Fragment, useEffect, useState, type ReactNode } from 'react'
 import { Link, NavLink, Outlet, useLocation, useNavigate, useParams, useSearchParams } from 'react-router'
 import { Badge, Button, Card, ErrorNote, Logo, Spinner, Toggle } from '../../components/ui'
@@ -21,6 +21,7 @@ const NAV = [
   { to: '/admin/insights', label: 'Insights', icon: BarChart3, superadmin: true },
   { to: '/admin/brokers', label: 'Brokers', icon: Landmark, superadmin: true },
   { to: '/admin/activity', label: 'Copy activity', icon: ArrowLeftRight, superadmin: true },
+  { to: '/admin/visitors', label: 'Visitors', icon: Globe, superadmin: true },
   { to: '/admin/email', label: 'Email', icon: Mail, superadmin: true },
 ]
 

@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import clsx from 'clsx'
-import { Award, Banknote, ChevronRight, CircleX, Eye, Search, Send, UserPlus, Users, Wallet } from 'lucide-react'
+import { Award, Banknote, ChevronRight, CircleX, Eye, Globe, Search, Send, UserPlus, Users, Wallet } from 'lucide-react'
 import { useEffect, useState, type ReactNode } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import { BarList, DualArea, Donut } from '../../components/Charts'
@@ -402,5 +402,118 @@ export function AdminActivity() {
       )}
       <p className="mt-3 text-xs text-ink-3">Newest 200. Refreshes every 10 seconds.</p>
     </>
+  )
+}
+
+/* ------------------------------------------------------------------ landing page visitors */
+
+type VisitorRow = {
+  visitor_id: string; ip: string; country: string | null; region: string | null; city: string | null; org: string | null
+  device: string | null; browser: string | null; os: string | null; referrer: string | null; utm_source: string | null
+  user_id: string | null; email: string | null; views: number; ips: number; first_seen: string; last_seen: string
+}
+type VisitorsResp = {
+  days: number
+  summary: { views: number; visitors: number; ips: number; signed_up: number; all_time: number }
+  series: { t: string; visitors: number; views: number }[]
+  countries: { key: string; n: number }[]
+  referrers: { key: string; n: number }[]
+  devices: { key: string; n: number }[]
+  browsers: { key: string; n: number }[]
+  geo: { provider: string | null; token: boolean }
+  rows: VisitorRow[]
+}
+
+const regionNames = (() => { try { return new Intl.DisplayNames(undefined, { type: 'region' }) } catch { return null } })()
+export function countryName(code: string | null) {
+  if (!code) return 'Unknown'
+  try { return regionNames?.of(code) ?? code } catch { return code }
+}
+export function flag(code: string | null) {
+  return code && /^[A-Z]{2}$/.test(code) ? String.fromCodePoint(...[...code].map((c) => 0x1f1a5 + c.charCodeAt(0))) : '🌐'
+}
+
+/** Superadmin: who visits the landing page, from where, and whether they signed up. */
+export function AdminVisitors() {
+  const { params, text, setText, set } = useSearch()
+  const days = Number(params.get('days') ?? 7)
+  const country = params.get('country') ?? ''
+  const qs = new URLSearchParams({ days: String(days), ...(params.get('q') ? { q: params.get('q')! } : {}), ...(country ? { country } : {}) }).toString()
+  const q = useQuery({ queryKey: ['admin', 'visitors', qs], queryFn: () => api<VisitorsResp>(`admin/visitors?${qs}`), refetchInterval: 30000 })
+  if (q.error) return <><H>Visitors</H><Forbidden e={q.error} /></>
+  const d = q.data
+  const label = (t: string) => toDate(t).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })
+  const conv = d && d.summary.visitors ? Math.round((100 * d.summary.signed_up) / d.summary.visitors) : null
+  return (
+    <div className="space-y-4 md:space-y-5">
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="min-w-0 flex-1">
+          <h1 className="text-2xl font-bold tracking-tight md:text-[28px]">Visitors</h1>
+          <p className="mt-1 text-sm text-ink-2">People who opened the landing page, by IP and where it maps to. Bots are left out.</p>
+        </div>
+        <Tabs value={String(days)} options={[['1', '24h'], ['7', '7d'], ['30', '30d'], ['90', '90d']]} onChange={(v) => set('days', v)} />
+      </div>
+      {!d ? <Spinner /> : (
+        <>
+          <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+            <Stat icon={Users} label="Visitors" value={d.summary.visitors} color="var(--brand)" foot={`${d.summary.all_time} all time`} />
+            <Stat icon={Eye} label="Page views" value={d.summary.views} color="#8b5cf6" foot={`${d.summary.ips} different IPs`} />
+            <Stat icon={UserPlus} label="Signed up" value={d.summary.signed_up} color="var(--up)" foot={conv != null ? `${conv}% of visitors` : undefined} />
+            <Stat icon={Globe} label="Countries" value={d.countries.filter((c) => c.key).length} color="var(--warn)" foot={d.countries[0]?.key ? `Most from ${countryName(d.countries[0].key)}` : undefined} />
+          </div>
+          {!d.geo.provider && <ErrorNote>Location lookups are off (PS_GEO_PROVIDER is empty), so only IPs are shown.</ErrorNote>}
+          <Panel title="Visitors per day" action={<span className="flex gap-3 text-xs text-ink-3"><span className="flex items-center gap-1.5"><span className="size-2 rounded-full bg-brand" />Visitors</span><span className="flex items-center gap-1.5"><span className="size-2 rounded-full" style={{ background: '#8b5cf6' }} />Page views</span></span>}>
+            <DualArea data={d.series.map((s) => ({ t: s.t, a: s.visitors, b: s.views }))} a="var(--brand)" b="#8b5cf6" labelOf={label} />
+          </Panel>
+          <div className="grid gap-4 lg:grid-cols-3">
+            <Panel title="Countries">
+              {!d.countries.length ? <p className="text-sm text-ink-3">No visits yet.</p> : (
+                <ul className="space-y-1">
+                  {d.countries.map((c) => (
+                    <li key={c.key || 'none'}>
+                      <button onClick={() => set('country', country === c.key ? '' : c.key)} disabled={!c.key} className={clsx('flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm hover:bg-surface-2', country === c.key && c.key && 'bg-brand-soft text-brand')}>
+                        <span>{flag(c.key || null)}</span><span className="flex-1 truncate font-semibold">{countryName(c.key || null)}</span><b className="tabular">{c.n}</b>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </Panel>
+            <Panel title="Where they came from">
+              <BarList rows={d.referrers.map((r) => ({ label: r.key || 'Direct / unknown', value: r.n, sub: `${r.n}` }))} />
+            </Panel>
+            <Panel title="Devices and browsers">
+              <BarList rows={[...d.devices.map((r) => ({ label: r.key || 'unknown', value: r.n, sub: `${r.n}` })), ...d.browsers.map((r) => ({ label: r.key || 'unknown', value: r.n, sub: `${r.n}`, tone: 'up' as const }))]} />
+            </Panel>
+          </div>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <SearchBox value={text} onChange={setText} placeholder="Search IP, city, referrer or email" />
+            {country && <button onClick={() => set('country', '')} className="h-11 rounded-xl bg-brand-soft px-4 text-sm font-semibold text-brand">{flag(country)} {countryName(country)} ✕</button>}
+          </div>
+          {!d.rows.length ? <p className="text-ink-3">No visitors match.</p> : (
+            <Card className="overflow-x-auto p-0">
+              <table className="w-full min-w-[860px] text-left text-sm">
+                <thead className="text-ink-3"><tr className="border-b border-line">{['Last seen', 'IP', 'Location', 'Network', 'Device', 'Came from', 'Views', 'Signed up'].map((h) => <th key={h} className="px-4 py-3 font-semibold">{h}</th>)}</tr></thead>
+                <tbody className="divide-y divide-line">
+                  {d.rows.map((v) => (
+                    <tr key={v.visitor_id}>
+                      <td className="px-4 py-3 whitespace-nowrap text-ink-3">{ago(v.last_seen)}<span className="block text-xs">first {ago(v.first_seen)}</span></td>
+                      <td className="px-4 py-3 font-mono text-xs">{v.ip}{v.ips > 1 && <span className="block text-ink-3">+{v.ips - 1} more</span>}</td>
+                      <td className="px-4 py-3">{flag(v.country)} <span className="font-semibold">{[v.city, v.country ? countryName(v.country) : null].filter(Boolean).join(', ') || 'Unknown'}</span>{v.region && v.region !== v.city && <span className="block text-xs text-ink-3">{v.region}</span>}</td>
+                      <td className="max-w-48 truncate px-4 py-3 text-ink-3" title={v.org ?? undefined}>{v.org?.replace(/^AS\d+\s*/, '') ?? '—'}</td>
+                      <td className="px-4 py-3">{v.device ?? '—'}<span className="block text-xs text-ink-3">{[v.browser, v.os].filter(Boolean).join(' · ')}</span></td>
+                      <td className="px-4 py-3">{v.referrer ?? 'Direct'}{v.utm_source && <span className="block text-xs text-ink-3">utm: {v.utm_source}</span>}</td>
+                      <td className="px-4 py-3 tabular">{v.views}</td>
+                      <td className="px-4 py-3">{v.user_id ? <Link to={`/admin/users/${v.user_id}`} className="font-semibold text-up hover:underline">{v.email}</Link> : <span className="text-ink-3">—</span>}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </Card>
+          )}
+          <p className="text-xs text-ink-3">One row per visitor (browser session), newest 300. Locations come from the IP{d.geo.provider === 'ipinfo' ? ' via ipinfo.io' : ''} and are city-level guesses, not exact addresses.</p>
+        </>
+      )}
+    </div>
   )
 }

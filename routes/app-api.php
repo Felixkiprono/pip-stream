@@ -11,11 +11,13 @@ use App\Http\Controllers\DetailController;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\SettingsController;
 use App\Http\Controllers\TelegramController;
+use App\Http\Controllers\VisitController;
 use Illuminate\Support\Facades\Route;
 
 // ---------------------------------------------------------------- auth
 Route::get('auth/me', [AuthController::class, 'me']);
 Route::get('founding', [AuthController::class, 'founding']);
+Route::post('visit', [VisitController::class, 'store'])->middleware('throttle:visits');
 Route::middleware('throttle:auth')->group(function () {
     Route::post('auth/register', [AuthController::class, 'register']);
     Route::post('auth/login', [AuthController::class, 'login']);
@@ -105,6 +107,7 @@ Route::middleware(['auth', 'active'])->group(function () {
             Route::get('insights', [InsightsController::class, 'insights']);
             Route::get('brokers', [InsightsController::class, 'brokers']);
             Route::get('activity', [InsightsController::class, 'activity']);
+            Route::get('visitors', [InsightsController::class, 'visitors']);
             Route::get('mail', [MailController::class, 'show']);
             Route::put('mail', [MailController::class, 'update']);
             Route::post('mail/test', [MailController::class, 'test'])->middleware('throttle:admin-test');

@@ -36,6 +36,7 @@ class AppServiceProvider extends ServiceProvider
         $per('writes', 20);
         $per('installer', 10);
         $per('admin-test', 6);
+        $per('visits', 30);
 
         // Resend key and sender from Admin → Email (encrypted in platform_settings), .env as fallback
         try {

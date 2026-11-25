@@ -216,8 +216,8 @@ export default function Settings() {
             />
             {s.data?.alerts.telegram && s.data.bot && (
               <>
-                <Row icon={<Send className="size-5 opacity-0" />} title="Trade alerts" sub="A message when a trade opens, changes or closes" right={<Toggle label="Trade alerts" on={s.data.bot.trade_alerts} onChange={(on) => set({ bot_trade_alerts: on })} />} />
-                <Row icon={<Send className="size-5 opacity-0" />} title="Daily summary" sub="A short recap every evening, only on days with trades" right={<Toggle label="Daily summary" on={s.data.bot.daily_summary} onChange={(on) => set({ bot_daily_summary: on })} />} />
+                <li className="flex items-center gap-3 py-3 pl-[52px]"><span className="min-w-0 flex-1"><span className="block font-semibold">Trade alerts</span><span className="block text-sm text-ink-3">A message when a trade opens, changes or closes</span></span><Toggle label="Trade alerts" on={s.data.bot.trade_alerts} onChange={(on) => set({ bot_trade_alerts: on })} /></li>
+                <li className="flex items-center gap-3 py-3 pl-[52px]"><span className="min-w-0 flex-1"><span className="block font-semibold">Daily summary</span><span className="block text-sm text-ink-3">A short recap every evening, only on days with trades</span></span><Toggle label="Daily summary" on={s.data.bot.daily_summary} onChange={(on) => set({ bot_daily_summary: on })} /></li>
                 <li className="flex flex-wrap gap-4 py-3 pl-[52px]">
                   <button className="text-sm font-semibold text-brand disabled:opacity-50" disabled={botTest === 'busy'} onClick={async () => {
                     setBotTest('busy')

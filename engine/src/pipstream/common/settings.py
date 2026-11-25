@@ -54,6 +54,8 @@ class Settings(BaseModel):
     # seconds opens nothing for a rule that already copied it (0 turns it off). A rule can set
     # its own with limits.duplicate_window_min.
     risk_duplicate_window_s: int = 1800
+    # "Ask me before each trade": how long a held signal waits for the customer's yes
+    risk_confirm_ttl_s: int = 300
 
     # Router
     router_global_max_lot: float = 5.0

@@ -8,12 +8,13 @@ use App\Models\Plan;
 use App\Models\User;
 use App\Notifications\Connected;
 use App\Pipstream\Accounts;
+use App\Pipstream\Bot\BotSettings;
+use App\Pipstream\Bot\BotUpdates;
 use App\Pipstream\Bus;
 use App\Pipstream\Ids;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Http;
 
 class WebhookController extends Controller
 {
@@ -24,6 +25,15 @@ class WebhookController extends Controller
         $sig = (string) $r->header('x-paystack-signature');
         abort_unless($secret && hash_equals(hash_hmac('sha512', $r->getContent(), $secret), $sig), 401);
         $ev = $r->json()->all();
+        if (in_array($ev['event'] ?? null, ['charge.failed', 'invoice.payment_failed'], true)) {
+            $uid = $ev['data']['metadata']['user_id'] ?? $ev['data']['subscription']['metadata']['user_id'] ?? null;
+            if ($uid && ($u = User::find($uid)) && Cache::add('payfail:'.($ev['data']['reference'] ?? $ev['data']['id'] ?? $uid), 1, now()->addDay())) {
+                Accounts::safely(fn () => $u->notify(new \App\Notifications\TradeAlert('payment_failed', 'Your payment didn\'t go through',
+                    'Your plan payment failed, so it was not renewed. Try again in PipStream → Plan and billing (card or M-Pesa).')));
+            }
+
+            return ['ok' => true];
+        }
         if (($ev['event'] ?? null) !== 'charge.success') {
             return ['ok' => true];
         }
@@ -59,28 +69,27 @@ class WebhookController extends Controller
         return ['ok' => true];
     }
 
-    /** PipStream alerts bot: "/start <token>" links the chat to the user who tapped the link. */
-    public function telegramBot(Request $r, string $secret)
+    /**
+     * @pip_stream_bot (Telegram Bot API). The secret is in the URL and, when the webhook was set
+     * from Admin, also in Telegram's X-Telegram-Bot-Api-Secret-Token header. Always answers 200
+     * so Telegram never re-sends an update; each update is handled once (update_id).
+     */
+    public function telegramBot(Request $r, string $secret, BotUpdates $bot)
     {
-        abort_unless(config('pipstream.bot_webhook_secret') && hash_equals(config('pipstream.bot_webhook_secret'), $secret), 404);
-        $msg = $r->input('message', []);
-        $text = trim((string) ($msg['text'] ?? ''));
-        $chat = $msg['chat']['id'] ?? null;
-        if ($chat && preg_match('/^\/start\s+([A-Za-z0-9]{32})$/', $text, $m) && ($uid = Cache::pull("botlink:{$m[1]}"))) {
-            DB::table('notification_prefs')->upsert([['user_id' => $uid, 'channel' => 'telegram_bot', 'address' => (string) $chat]],
-                ['user_id', 'channel'], ['address']);
-            $this->reply($chat, "You're connected. PipStream will message you here when trades open, change or close.");
-        } elseif ($chat && str_starts_with($text, '/start')) {
-            $this->reply($chat, 'Open PipStream → Settings → Alerts on Telegram to connect this chat.');
+        $expected = BotSettings::secret();
+        abort_unless($expected && hash_equals($expected, $secret), 404);
+        $header = $r->header('X-Telegram-Bot-Api-Secret-Token');
+        abort_if($header !== null && ! hash_equals($expected, (string) $header), 404);
+        $update = $r->json()->all();
+        if (isset($update['update_id']) && ! Cache::add('botupd:'.$update['update_id'], 1, now()->addDay())) {
+            return ['ok' => true];
+        }
+        try {
+            $bot->handle($update);
+        } catch (\Throwable $e) {
+            report($e);
         }
 
         return ['ok' => true];
-    }
-
-    private function reply($chat, string $text): void
-    {
-        if ($t = config('pipstream.bot_token')) {
-            Http::timeout(10)->post("https://api.telegram.org/bot{$t}/sendMessage", ['chat_id' => $chat, 'text' => $text]);
-        }
     }
 }

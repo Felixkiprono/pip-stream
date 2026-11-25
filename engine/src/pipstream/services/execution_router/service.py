@@ -108,9 +108,11 @@ class ExecutionRouter:
         self._setting_up: set[str] = set()
         self.retry_delays = [float(x) for x in str(s.router_followup_retry_s).split(",") if x.strip()]
 
-    async def _kill_switch(self, user_id: str) -> bool:
+    async def _kill_switch(self, user_id: str, action: str = "open") -> bool:
+        """A customer's own pause stops new trades and changes, never closing one (they may pause
+        and then close everything from the bot). The global kill switch stops everything."""
         vals = await self.c.redis.mget(f"{self.p}:killswitch:global", f"{self.p}:killswitch:user:{user_id}")
-        return any(v == "1" for v in vals)
+        return vals[0] == "1" or (vals[1] == "1" and action != "close")
 
     async def _audit(self, action: str, intent: TradeIntent, detail: dict) -> None:
         await self.c.db.execute("insert into audit_log (actor, action, entity, entity_id, detail) "
@@ -128,7 +130,7 @@ class ExecutionRouter:
             return
         if self.verifier.expired(intent):
             return await self._finish(ev, intent, error="expired")
-        if await self._kill_switch(intent.user_id):
+        if await self._kill_switch(intent.user_id, intent.action):
             return await self._finish(ev, intent, error="kill_switch")
         if intent.action == "open" and intent.options is None and intent.volume is not None:
             cap = min(self.c.settings.router_global_max_lot, intent.max_lot or float("inf"))
@@ -199,7 +201,7 @@ class ExecutionRouter:
                 await asyncio.wait_for(self.c.stop.wait(), wait)
             if self.c.stop.is_set():
                 return await self._finish(ev, intent, error="engine stopped before the retry", attempts=attempt + 1)
-            if await self._kill_switch(intent.user_id):
+            if await self._kill_switch(intent.user_id, intent.action):
                 return await self._finish(ev, intent, error="kill_switch", attempts=attempt + 1)
             await self._execute(ev, intent, attempt + 1)
 

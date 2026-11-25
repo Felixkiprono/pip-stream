@@ -27,6 +27,7 @@ function RuleSheet({ c, onClose, initialTab = 'settings' }: { c: MyChannel; onCl
   const [broker, setBroker] = useState(c.rule?.broker_account_id ?? '')
   const [live, setLive] = useState(c.rule?.mode === 'live')
   const [enabled, setEnabled] = useState(c.rule?.enabled ?? true)
+  const [askFirst, setAskFirst] = useState(!!c.rule?.limits?.confirm_first)
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
   const selected = brokers.data?.brokers.find((b) => b.id === broker)
@@ -36,7 +37,7 @@ function RuleSheet({ c, onClose, initialTab = 'settings' }: { c: MyChannel; onCl
     setBusy(true)
     setErr('')
     try {
-      const saved = await saveRule(c.id, { style: style === 'custom' ? 'balanced' : style, broker_account_id: broker || undefined, live: live && !isPaper, enabled })
+      const saved = await saveRule(c.id, { style: style === 'custom' ? 'balanced' : style, broker_account_id: broker || undefined, live: live && !isPaper, enabled, confirm_first: askFirst })
       qc.invalidateQueries({ queryKey: ['channels'] })
       qc.invalidateQueries({ queryKey: ['brokers'] })
       if (saved) onClose()
@@ -91,6 +92,13 @@ function RuleSheet({ c, onClose, initialTab = 'settings' }: { c: MyChannel; onCl
             <Toggle on={live} onChange={setLive} label="Live trading" />
           </div>
         )}
+        <div className="flex items-center justify-between gap-3 rounded-2xl bg-surface-2 p-3">
+          <span>
+            <span className="block font-semibold">Ask me before each trade</span>
+            <span className="block text-sm text-ink-3">The PipStream bot asks "Copy it?" on Telegram. No answer in 5 minutes: skipped.</span>
+          </span>
+          <Toggle on={askFirst} onChange={setAskFirst} label="Ask me before each trade" />
+        </div>
         <div>
           <p className="mb-2 text-sm font-semibold text-ink-3">Trade size</p>
           <StylePicker value={style} onChange={setStyle} styles={styles.data?.styles ?? []} />

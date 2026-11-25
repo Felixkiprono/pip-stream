@@ -13,3 +13,5 @@ Artisan::command('inspire', function () {
 // worker runs, and the watchdog alerts the operators when anything stops.
 Schedule::job(new QueueHeartbeat)->everyMinute()->name('queue-heartbeat');
 Schedule::command('pipstream:watchdog')->everyMinute()->withoutOverlapping(5);
+// The PipStream bot: evening summary in each linked chat, plan reminders
+Schedule::command('pipstream:bot-daily')->dailyAt((string) config('pipstream.bot_daily_at'))->withoutOverlapping(30);

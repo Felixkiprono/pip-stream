@@ -18,7 +18,22 @@ class Connected extends Notification implements ShouldQueue
 
     public function via(object $notifiable): array
     {
-        return ['mail'];
+        return \App\Pipstream\Bot\Bot::chatOf($notifiable->id) ? ['mail', \App\Notifications\Channels\TelegramBotChannel::class] : ['mail'];
+    }
+
+    public function toTelegram(object $notifiable): string
+    {
+        return match ($this->what) {
+            'telegram' => "✅ Your Telegram is connected\nPipStream can now read your channels. Next: pick the channels to copy.",
+            'broker' => '✅ '.($this->detail ?: 'Your broker account')." is connected\nSignals from your channels are copied to it with the style you picked.",
+            'plan' => '⭐ Your '.($this->detail ?: 'Pro')." plan is active\nThanks for your payment! Real-money copying and every Pro feature are on.",
+            default => (string) $this->detail,
+        };
+    }
+
+    public function telegramButtons(object $notifiable): array
+    {
+        return $this->what === 'telegram' ? [['➕ Follow a channel' => 'm:follow']] : [['📊 Status' => 'm:status']];
     }
 
     public function toMail(object $notifiable): MailMessage

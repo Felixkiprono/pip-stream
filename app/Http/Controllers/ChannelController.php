@@ -80,6 +80,7 @@ class ChannelController extends Controller
             'max_lot' => ['nullable', 'numeric', 'min:0.01', 'max:100'],
             'max_daily_loss' => ['nullable', 'numeric', 'min:0'],
             'stake' => ['nullable', 'numeric', 'min:0.35', 'max:1000'],
+            'confirm_first' => ['sometimes', 'boolean'],
         ]);
         $broker = $data['broker_account_id'] ?? null
             ? $u->brokerAccounts()->findOrFail($data['broker_account_id'])
@@ -98,7 +99,14 @@ class ChannelController extends Controller
         if ($live) {
             $this->confirmLive($r, $broker, $already, (bool) ($data['confirm_live'] ?? false));
         }
-        $rule->fill(Presets::apply($data['style'], $data) + [
+        $preset = Presets::apply($data['style'], $data);
+        // "Ask me before each trade" (answered in the PipStream bot) survives a style change
+        $ask = array_key_exists('confirm_first', $data) ? (bool) $data['confirm_first'] : (bool) (($rule->limits ?? [])['confirm_first'] ?? false);
+        abort_if($ask && ! \App\Pipstream\Bot\Bot::chatOf($u), 422, 'Connect Telegram alerts first (Settings): that is where PipStream asks you.');
+        if ($ask) {
+            $preset['limits']['confirm_first'] = true;
+        }
+        $rule->fill($preset + [
             'broker_account_id' => $broker->id, 'enabled' => $data['enabled'] ?? true,
             'mode' => $broker->connector === 'paper' ? 'paper' : ($live ? 'live' : 'shadow'),
             'tp_split' => 'equal', 'filters' => $rule->filters ?? []])->save();

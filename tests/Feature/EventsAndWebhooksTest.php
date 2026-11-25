@@ -72,7 +72,7 @@ class EventsAndWebhooksTest extends TestCase
         $url = $this->actingAs($u)->postJson('/api/v1/settings/telegram-alerts')->json('url');
         $token = substr($url, strpos($url, 'start=') + 6);
         $this->postJson('/webhooks/telegram/wrong', [])->assertNotFound();
-        $this->postJson('/webhooks/telegram/test-bot-secret', ['message' => ['text' => "/start {$token}", 'chat' => ['id' => 4242]]])->assertOk();
+        $this->postJson('/webhooks/telegram/test-bot-secret', ['message' => ['text' => "/start {$token}", 'chat' => ['id' => 4242, 'type' => 'private'], 'from' => ['id' => 4242, 'first_name' => 'W']]])->assertOk();
         $this->assertDatabaseHas('notification_prefs', ['user_id' => $u->id, 'channel' => 'telegram_bot', 'address' => '4242']);
         $this->getJson('/api/v1/settings')->assertJsonPath('alerts.telegram', true);
     }

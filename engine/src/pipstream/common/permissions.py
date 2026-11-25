@@ -43,11 +43,12 @@ SERVICES: dict[str, ServicePerms] = {
     # risk = copy rules, sizing, limits; the ONLY writer of trade.intent (holds signing key)
     "risk": ServicePerms(
         publish=frozenset({T.TRADE_INTENT, T.RISK_LIMIT_HIT}),
-        consume=frozenset({T.SIGNAL_PARSED}),
+        # user.command: close all / approve or skip a held signal, asked by the customer
+        consume=frozenset({T.SIGNAL_PARSED, T.USER_COMMAND}),
         broadcast=frozenset({T.CONFIG_CHANGED, T.BILLING_CHANGED}),
         ro_keys=("ps:acct:*", "ps:quote:*", "ps:killswitch:*"),
-        # channel self-tests (what it would copy) and the duplicate-signal guard
-        rw_keys=("ps:chtest:*", "ps:dup:*"),
+        # channel self-tests (what it would copy), the duplicate-signal guard, signals held for a yes
+        rw_keys=("ps:chtest:*", "ps:dup:*", "ps:pending:*"),
     ),
     # executor = execution router + position tracker (holds broker credentials)
     "executor": ServicePerms(
@@ -63,7 +64,7 @@ SERVICES: dict[str, ServicePerms] = {
     # Web app, billing, notifications, kill switch. Its queue/cache/session keys live under
     # "laravel:" (see LARAVEL_ACL_EXTRA); it can never write trade.intent.
     "laravel": ServicePerms(
-        publish=frozenset({T.CONFIG_CHANGED, T.BILLING_CHANGED, T.TG_LOGIN_REQUEST}),
+        publish=frozenset({T.CONFIG_CHANGED, T.BILLING_CHANGED, T.TG_LOGIN_REQUEST, T.USER_COMMAND}),
         consume=frozenset({T.TRADE_EXECUTED, T.TRADE_FAILED, T.TRADE_CLOSED, T.RISK_LIMIT_HIT,
                            T.SIGNAL_REJECTED, T.TG_LOGIN_STATUS}),
         rw_keys=("ps:killswitch:*", "ps:eares:*", "ps:quote:*", "ps:paper:*", "ps:chtest:*"),

@@ -280,7 +280,11 @@ class EaController extends Controller
         }
 
         // the EA refuses new trades on a real-money login the customer has not confirmed
-        $lines = ['OK|1000|'.$now.'|'.(LiveGate::allowsOpening($b, is_array($state) ? $state : null) ? '1' : '0')];
+        $allowed = LiveGate::allowsOpening($b, is_array($state) ? $state : null);
+        if (! $allowed && is_array($state) && LiveGate::kind($state) === 'real') {
+            $this->askLiveInBot($b, $state);
+        }
+        $lines = ['OK|1000|'.$now.'|'.($allowed ? '1' : '0')];
         $stream = config('pipstream.stream_prefix').":acct:{$b->id}:ea:cmd";
         $entries = $redis->xRevRange($stream, '+', '-', 30) ?: [];
         $nowMs = (int) floor(microtime(true) * 1000);
@@ -300,5 +304,23 @@ class EaController extends Controller
         }
 
         return response(implode("\n", $lines)."\n", 200)->header('Content-Type', 'text/plain');
+    }
+
+    /** A real-money login waits for the customer's yes: ask once a day in the PipStream bot, with buttons. */
+    private function askLiveInBot(\App\Models\BrokerAccount $b, array $state): void
+    {
+        $login = (string) ($state['login'] ?? '');
+        if ($login === '' || ! \Illuminate\Support\Facades\Cache::add("botlive:{$b->id}:{$login}", 1, now()->addDay())) {
+            return;
+        }
+        if (! \App\Models\CopyRule::where('broker_account_id', $b->id)->where('mode', 'live')->where('enabled', true)->exists()) {
+            return;
+        }
+        $d = LiveGate::describe($b, $state);
+        $text = "💰 Your MetaTrader is on a REAL-money account\n"
+            .trim(($d['company'] ?? '').' · login '.$login.(isset($d['balance']) ? ' · balance '.$d['balance'].' '.($d['currency'] ?? '') : ''), ' ·')
+            ."\n\nPipStream won't open trades there until you say yes. Real money can be lost, so only say yes if you meant to copy into this account.";
+        \Illuminate\Support\defer(fn () => \App\Pipstream\Bot\Bot::quietly(fn () => \App\Pipstream\Bot\Bot::toUser($b->user_id, $text,
+            [['✅ Yes, copy to this real account' => "lv:y:{$b->id}"], ['✖ Not now' => "lv:n:{$b->id}"]])));
     }
 }

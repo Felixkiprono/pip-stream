@@ -10,7 +10,10 @@ import { api, ApiError, post, put, settle } from '../../lib/api'
 import { isAdmin, useSession } from '../../lib/session'
 import type { TgStatus } from '../../lib/types'
 
-type S = { name: string; email: string; alerts: { telegram: boolean; email: boolean }; bot_username: string | null }
+type S = {
+  name: string; email: string; alerts: { telegram: boolean; email: boolean }; bot_username: string | null; bot_ready: boolean
+  bot: { name: string | null; username: string | null; trade_alerts: boolean; daily_summary: boolean; blocked: boolean } | null
+}
 
 function Row({ icon, title, sub, right, to }: { icon: ReactNode; title: string; sub?: ReactNode; right?: ReactNode; to?: string }) {
   const body = (
@@ -86,6 +89,7 @@ export default function Settings() {
   const qc = useQueryClient()
   const { user, refresh } = useSession()
   const s = useQuery({ queryKey: ['settings'], queryFn: () => api<S>('settings') })
+  const [botTest, setBotTest] = useState<string | null>(null)
   const tg = useQuery({ queryKey: ['telegram'], queryFn: () => api<{ account: { linked: boolean; phone_hint: string | null } | null }>('telegram') })
   const set = async (body: object) => {
     qc.setQueryData(['settings'], await put<S>('settings', body))
@@ -194,11 +198,14 @@ export default function Settings() {
             <Row
               icon={<Send className="size-5" />}
               title="Telegram alerts"
-              sub={s.data?.alerts.telegram ? 'From the PipStream bot' : 'One tap to get trade alerts in Telegram'}
+              sub={s.data?.alerts.telegram
+                ? (s.data.bot?.blocked ? 'You blocked the PipStream bot. Open it and tap Restart.' : `Connected to @${s.data.bot_username}. Check trades, pause copying and get help right in Telegram.`)
+                : 'One tap: trade alerts, a daily summary, and buttons to check trades or pause copying in Telegram'}
               right={
                 <Toggle
                   label="Telegram alerts"
                   on={!!s.data?.alerts.telegram}
+                  disabled={!s.data?.bot_ready && !s.data?.alerts.telegram}
                   onChange={async (on) => {
                     if (!on) return set({ telegram_alerts: false })
                     const { url } = await post<{ url: string }>('settings/telegram-alerts')
@@ -207,6 +214,25 @@ export default function Settings() {
                 />
               }
             />
+            {s.data?.alerts.telegram && s.data.bot && (
+              <>
+                <Row icon={<Send className="size-5 opacity-0" />} title="Trade alerts" sub="A message when a trade opens, changes or closes" right={<Toggle label="Trade alerts" on={s.data.bot.trade_alerts} onChange={(on) => set({ bot_trade_alerts: on })} />} />
+                <Row icon={<Send className="size-5 opacity-0" />} title="Daily summary" sub="A short recap every evening, only on days with trades" right={<Toggle label="Daily summary" on={s.data.bot.daily_summary} onChange={(on) => set({ bot_daily_summary: on })} />} />
+                <li className="flex flex-wrap gap-4 py-3 pl-[52px]">
+                  <button className="text-sm font-semibold text-brand disabled:opacity-50" disabled={botTest === 'busy'} onClick={async () => {
+                    setBotTest('busy')
+                    try {
+                      await post('settings/telegram-alerts/test')
+                      setBotTest('Sent. Check Telegram.')
+                    } catch (e) {
+                      setBotTest((e as Error).message)
+                    }
+                  }}>Send me a test</button>
+                  <a className="text-sm font-semibold text-brand" href={`https://t.me/${s.data.bot_username}`} target="_blank" rel="noreferrer">Open the bot</a>
+                  {botTest && botTest !== 'busy' && <span className="text-sm text-ink-3">{botTest}</span>}
+                </li>
+              </>
+            )}
             <Row icon={<Mail className="size-5" />} title="Email for failed trades" right={<Toggle label="Email alerts" on={!!s.data?.alerts.email} onChange={(on) => set({ email_alerts: on })} />} />
           </ul>
         </Card>

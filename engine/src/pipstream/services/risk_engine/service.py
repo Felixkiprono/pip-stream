@@ -15,6 +15,13 @@ the duplicate window (30 min by default) is skipped as `duplicate_signal`.
 
 Modes: shadow = record "would have traded" only (week 1); paper = paper connector;
 live = the account's real connector (demo accounts during the experiment).
+
+Customer commands (user.command, from the web app / the PipStream bot):
+  close_all       one signed close intent per open trade of the customer
+  approve_signal  a rule with limits.confirm_first holds each new signal (ps:pending:<id>, 5 min)
+                  and asks the customer (risk.limit_hit awaiting_confirm); yes re-plans it now,
+                  with fresh prices and limits, and copies it
+  reject_signal   drops the held signal
 """
 from __future__ import annotations
 
@@ -22,8 +29,10 @@ import hashlib
 import time
 from datetime import datetime, timedelta, timezone
 
+import json
+
 from ...common.events import (AccountInfo, Event, ParsedSignal, RiskLimitHit, SymbolSpec, TradeIntent,
-                              Topic)
+                              Topic, UserCommand)
 from ...common.ids import new_id
 from ...common.log import ctx
 from ...common.service import Context
@@ -67,6 +76,11 @@ class RiskEngine:
                           "kill switches and sizing still apply")
 
     # ------------------------------------------------------------------ entry
+    async def dispatch(self, ev: Event) -> None:
+        if ev.topic == Topic.USER_COMMAND:
+            return await self.command(ev)
+        return await self.handle(ev)
+
     async def handle(self, ev: Event) -> None:
         sig: ParsedSignal = ev.parse()
         if await self.c.redis.get(f"{self.p}:killswitch:global") == "1":
@@ -81,6 +95,9 @@ class RiskEngine:
             except Skip as s:
                 await self._limit(sig, rule, s, ev.trace_id)
                 continue
+            if intents and self._asks_first(sig, rule):
+                await self._hold(sig, dict(rule), ev.trace_id)
+                continue
             if rule["mode"] == "shadow":
                 await self.c.db.execute("insert into shadow_trades (id, copy_rule_id, signal_id, payload) "
                                         "values ($1,$2,$3,$4)", new_id("shd"), rule["id"], sig.signal_id,
@@ -90,6 +107,90 @@ class RiskEngine:
                 continue
             for intent in intents:
                 await self._emit(intent, ev.trace_id)
+
+    # ------------------------------------------------------------------ ask first / customer commands
+    @staticmethod
+    def _asks_first(sig: ParsedSignal, rule) -> bool:
+        """New trades only: follow-ups (SL/TP moves, closes) to trades already open always go through."""
+        return bool((rule["limits"] or {}).get("confirm_first")) and rule["mode"] != "shadow" \
+            and sig.kind in ("open", "options") and sig.source.edit_version == 0
+
+    async def _hold(self, sig: ParsedSignal, rule: dict, trace_id: str) -> None:
+        pid = new_id("pnd")
+        ttl = int(self.c.settings.risk_confirm_ttl_s)
+        await self.c.redis.set(f"{self.p}:pending:{pid}", json.dumps({
+            "signal": sig.model_dump(mode="json", by_alias=True), "rule_id": rule["id"], "user_id": rule["user_id"],
+            "trace_id": trace_id, "at": time.time()}), ex=ttl)
+        # the expiry note: a marker that outlives the held signal by a minute
+        await self.c.redis.set(f"{self.p}:pending:{pid}:exp", rule["user_id"], ex=ttl + 3600)
+        self.c.log.info("signal held for the customer's yes", extra=ctx(trace_id=trace_id, rule=rule["id"], pending=pid))
+        await self.c.bus.publish(Topic.RISK_LIMIT_HIT, RiskLimitHit(
+            user_id=rule["user_id"], broker_account_id=rule["broker_account_id"], copy_rule_id=rule["id"],
+            signal_id=sig.signal_id, limit="awaiting_confirm", detail=pid), trace_id=trace_id)
+
+    async def command(self, ev: Event) -> None:
+        cmd: UserCommand = ev.parse()
+        if cmd.action == "close_all":
+            return await self._close_all(cmd, ev.trace_id)
+        if not cmd.pending_id:
+            return
+        key = f"{self.p}:pending:{cmd.pending_id}"
+        raw = await self.c.redis.get(key)
+        held = json.loads(raw) if raw else None
+        if held and held["user_id"] != cmd.user_id:
+            self.c.log.warning("pending signal answered by another user; ignored", extra=ctx(pending=cmd.pending_id))
+            return
+        if not held or not await self.c.redis.delete(key):  # gone, or a second tap already took it
+            if held is None and await self.c.redis.get(f"{key}:exp") == cmd.user_id and cmd.action == "approve_signal":
+                await self.c.redis.delete(f"{key}:exp")
+                await self.c.bus.publish(Topic.RISK_LIMIT_HIT, RiskLimitHit(
+                    user_id=cmd.user_id, broker_account_id="", copy_rule_id="", signal_id="",
+                    limit="confirm_expired", detail="the signal waited 5 minutes for your yes"), trace_id=ev.trace_id)
+            return
+        await self.c.redis.delete(f"{key}:exp")
+        sig = ParsedSignal.model_validate(held["signal"])
+        trace = held.get("trace_id") or ev.trace_id
+        rows = [dict(r) for r in await self.c.db.fetch(RULES_SQL, sig.channel_id) if r["id"] == held["rule_id"]]
+        if cmd.action == "reject_signal" or not rows:
+            if rows:
+                await self._limit(sig, rows[0], Skip("confirm_rejected", "you skipped it"), trace)
+            return
+        rule = rows[0]
+        try:
+            intents = await self.plan(sig, rule, claim=False)  # fresh prices, limits and kill switch
+        except Skip as s:
+            return await self._limit(sig, rule, s, trace)
+        if rule["mode"] == "shadow":
+            return
+        for intent in intents:
+            await self._emit(intent, trace)
+        self.c.log.info("held signal copied after the customer's yes", extra=ctx(trace_id=trace, rule=rule["id"], legs=len(intents)))
+
+    async def _close_all(self, cmd: UserCommand, trace_id: str) -> None:
+        """Every open trade of this customer, on every enabled account, closed in full."""
+        rows = await self.c.db.fetch(
+            "select p.*, b.connector, coalesce("
+            " (select r.id from copy_rules r where r.user_id = p.user_id and r.channel_id = p.channel_id"
+            "   and r.broker_account_id = p.broker_account_id order by r.enabled desc, r.created_at limit 1),"
+            " (select i.copy_rule_id from trade_intents i where i.signal_id = p.signal_id"
+            "   and i.broker_account_id = p.broker_account_id order by i.created_at limit 1)) as rule_id "
+            "from positions p join broker_accounts b on b.id = p.broker_account_id and b.enabled "
+            "where p.user_id = $1 and p.status = 'open'", cmd.user_id)
+        n = 0
+        for p in rows:
+            if not p["rule_id"]:
+                self.c.log.warning("close all: no copy rule for position", extra=ctx(position=p["id"]))
+                continue
+            intent = TradeIntent(
+                idempotency_key=f"{cmd.command_id}:close:{p['broker_account_id']}:{p['ticket']}", user_id=p["user_id"],
+                broker_account_id=p["broker_account_id"], copy_rule_id=p["rule_id"], connector=p["connector"],
+                mode="paper" if p["connector"] == "paper" else "live", action="close", signal_id=p["signal_id"],
+                channel_id=p["channel_id"], source_message_id=p["source_message_id"], symbol=p["symbol"], side=p["side"],
+                volume=float(p["volume"]) if p["volume"] is not None else None, ticket=p["ticket"], tp_index=p["tp_index"],
+                expires_at=self.signer.expiry())
+            await self._emit(intent, trace_id)
+            n += 1
+        self.c.log.info("close all", extra=ctx(trace_id=trace_id, user=cmd.user_id, closing=n))
 
     async def _self_test(self, sig: ParsedSignal, rules: list[dict], trace_id: str) -> None:
         """Channel self-test: what this customer's rule would do with the post. Records the plan
@@ -384,4 +485,4 @@ class RiskEngine:
 
 async def main(c: Context) -> None:
     engine = RiskEngine(c)
-    await c.bus.subscribe([Topic.SIGNAL_PARSED], engine.handle, consumer=c.consumer)
+    await c.bus.subscribe([Topic.SIGNAL_PARSED, Topic.USER_COMMAND], engine.dispatch, consumer=c.consumer)

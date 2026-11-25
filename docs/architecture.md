@@ -110,6 +110,7 @@ stream it does not own (tested in `tests/test_bus_acl.py`).
 | `billing.webhook` | core_api | billing | group |
 | `billing.changed` | billing | risk_engine | broadcast |
 | `config.changed` | core_api | ingestor, parser, risk_engine, execution_router | broadcast (every replica) |
+| `user.command` (close all, approve/skip a held signal) | core_api (web app, PipStream bot) | risk_engine | group |
 | `dlq` | any (failed after 5 deliveries) | operators | – |
 
 Every event is an envelope `{event_id, topic, trace_id, occurred_at, producer, payload}`.

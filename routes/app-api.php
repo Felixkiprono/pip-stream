@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Admin\AdminController;
+use App\Http\Controllers\Admin\BotController;
 use App\Http\Controllers\Admin\InsightsController;
 use App\Http\Controllers\Admin\MailController;
 use App\Http\Controllers\AuthController;
@@ -85,6 +86,7 @@ Route::middleware(['auth', 'active'])->group(function () {
     Route::put('settings', [SettingsController::class, 'update']);
     Route::put('settings/password', [SettingsController::class, 'password'])->middleware('throttle:auth');
     Route::post('settings/telegram-alerts', [SettingsController::class, 'telegramAlerts']);
+    Route::post('settings/telegram-alerts/test', [SettingsController::class, 'telegramAlertsTest'])->middleware('throttle:admin-test');
 
     // ------------------------------------------------------------ admin
     Route::middleware('admin')->prefix('admin')->group(function () {
@@ -104,6 +106,11 @@ Route::middleware(['auth', 'active'])->group(function () {
         Route::post('users/{user}/role', [AdminController::class, 'userRole']);
         Route::post('users/{user}/trial', [AdminController::class, 'userTrial']);
         Route::get('audit', [AdminController::class, 'audit']);
+        // support inbox: what customers wrote to @pip_stream_bot
+        Route::get('support', [BotController::class, 'inbox']);
+        Route::get('support/{chat}', [BotController::class, 'conversation'])->whereNumber('chat');
+        Route::post('support/{chat}', [BotController::class, 'reply'])->whereNumber('chat')->middleware('throttle:writes');
+        Route::post('users/{user}/message', [BotController::class, 'message'])->middleware('throttle:writes');
         Route::middleware('superadmin')->group(function () {
             Route::get('insights', [InsightsController::class, 'insights']);
             Route::get('brokers', [InsightsController::class, 'brokers']);
@@ -112,6 +119,12 @@ Route::middleware(['auth', 'active'])->group(function () {
             Route::get('mail', [MailController::class, 'show']);
             Route::put('mail', [MailController::class, 'update']);
             Route::post('mail/test', [MailController::class, 'test'])->middleware('throttle:admin-test');
+            Route::get('bot', [BotController::class, 'show']);
+            Route::put('bot', [BotController::class, 'update']);
+            Route::post('bot/webhook', [BotController::class, 'webhook']);
+            Route::post('bot/test', [BotController::class, 'test'])->middleware('throttle:admin-test');
+            Route::get('bot/segments', [BotController::class, 'segments']);
+            Route::post('bot/broadcast', [BotController::class, 'broadcast']);
         });
     });
 });

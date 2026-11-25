@@ -35,10 +35,13 @@ return [
     // How long a web request waits for the engine to answer a Telegram login step
     'telegram_wait_seconds' => (float) env('PS_TELEGRAM_WAIT_SECONDS', 12),
 
-    // Alerts bot (Telegram Bot API) — a separate bot, never a reader account
+    // The PipStream bot (@pip_stream_bot, Telegram Bot API): alerts, buttons, support. A separate bot,
+    // never a reader account. Normally set in Admin → Telegram bot (stored encrypted); these are the fallback.
     'bot_token' => env('PS_TELEGRAM_BOT_TOKEN'),
-    'bot_username' => env('PS_TELEGRAM_BOT_USERNAME', 'PipStreamBot'),
+    'bot_username' => env('PS_TELEGRAM_BOT_USERNAME', 'pip_stream_bot'),
     'bot_webhook_secret' => env('PS_TELEGRAM_BOT_WEBHOOK_SECRET'),
+    // When the evening summary goes out (server time, UTC): 17:00 UTC is 8 PM in Nairobi
+    'bot_daily_at' => env('PS_BOT_DAILY_AT', '17:00'),
 
     // Payments
     'paystack_secret' => env('PAYSTACK_SECRET_KEY'),

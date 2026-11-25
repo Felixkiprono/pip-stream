@@ -21,7 +21,18 @@ class PasswordChanged extends Notification
 
     public function via(object $notifiable): array
     {
-        return ['mail'];
+        return isset($notifiable->id) && \App\Pipstream\Bot\Bot::chatOf($notifiable->id)
+            ? ['mail', \App\Notifications\Channels\TelegramBotChannel::class] : ['mail'];
+    }
+
+    public function toTelegram(object $notifiable): string
+    {
+        return "🔑 Your PipStream password was changed\n{$this->at}. If that was you, there is nothing to do.";
+    }
+
+    public function telegramButtons(object $notifiable): array
+    {
+        return [['🔒 It wasn\'t me' => 'sec:lock']];
     }
 
     public function toMail(object $notifiable): MailMessage

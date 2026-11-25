@@ -47,7 +47,7 @@ export type Rule = {
   fixed_lots: number | null
   risk_pct: number | null
   stake: number | null
-  limits: Record<string, number>
+  limits: Record<string, number | boolean>
 }
 export type MyChannel = { id: string; title: string; username?: string | null; signals_7d: number; last_signal_at: string | null; rule: Rule | null }
 export type BrokerAccountState = { balance?: number; equity?: number; currency?: string; login?: string; server?: string; company?: string; positions?: number; demo?: boolean; platform?: string; ea_version?: string; trade_mode?: string }

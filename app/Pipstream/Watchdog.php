@@ -106,6 +106,21 @@ class Watchdog
                 'title' => "MetaTrader offline: {$b->label}", 'detail' => "The PipStream EA last checked in {$ago($a)}. Signals for this account fail until MetaTrader is open with the EA on a chart."];
         }
 
+        // ------------------------------------------------------------ customers' Telegram reader (the session that reads channels)
+        $tgs = DB::select('select distinct on (t.user_id) t.id, t.user_id, t.status, (t.session_ciphertext is not null) as has_session '
+            .'from telegram_accounts t where exists (select 1 from subscriptions s where s.user_id = t.user_id) '
+            .'order by t.user_id, t.created_at desc');
+        foreach ($tgs as $t) {
+            $ok = $t->status === 'active' && $t->has_session;
+            if ($ok) {
+                Cache::put("watchdog:tg-seen:{$t->id}", 1, now()->addDays(60));
+            } elseif (! Cache::has("watchdog:tg-seen:{$t->id}")) {
+                continue; // never connected: the setup screens cover that
+            }
+            $out[] = ['key' => "tg:{$t->id}", 'ok' => $ok, 'severity' => 'warn', 'user_id' => $t->user_id,
+                'title' => 'Customer Telegram disconnected', 'detail' => "A customer's Telegram session ({$t->status}) can't read their channels, so their signals are not copied until they reconnect."];
+        }
+
         return $out;
     }
 
@@ -138,7 +153,7 @@ class Watchdog
             }
         }
         // a broker account that was removed or stopped copying live: nothing to watch any more
-        DB::table('system_alerts')->whereNull('resolved_at')->where('key', 'like', 'ea:%')
+        DB::table('system_alerts')->whereNull('resolved_at')->where(fn ($w) => $w->where('key', 'like', 'ea:%')->orWhere('key', 'like', 'tg:%'))
             ->whereNotIn('key', array_column($checks, 'key'))->update(['resolved_at' => now()]);
 
         return $changed;
@@ -153,6 +168,14 @@ class Watchdog
                 ? new TradeAlert('ea_online', 'MetaTrader is back online', 'PipStream is copying to it again.', ['broker_account_id' => substr($c['key'], 3)])
                 : new TradeAlert('ea_offline', 'MetaTrader is offline', 'PipStream has not heard from your MetaTrader for a few minutes, so signals can\'t be copied to it. Check that the computer is on, MetaTrader is open and the PipStream EA is on a chart with Algo Trading on.', ['broker_account_id' => substr($c['key'], 3)])));
         }
+        if (str_starts_with($c['key'], 'tg:') && ($u = User::find($c['user_id'] ?? ''))) {
+            Accounts::safely(fn () => $u->notify($recovered
+                ? new TradeAlert('tg_reconnected', 'Telegram is connected again', 'PipStream is reading your channels again.')
+                : new TradeAlert('tg_disconnected', 'Your Telegram is disconnected', 'PipStream can\'t read your channels any more (Telegram ended the session, for example after you logged out of other devices). Signals are not copied until you reconnect. It takes a minute.')));
+        }
+        // operators on Telegram too (admins who linked @pip_stream_bot), when turned on in Admin → Telegram bot
+        Bot\Bot::quietly(fn () => Bot\Bot::toOperators(($recovered ? "✅ Recovered: {$title}\n" : "🚨 {$title}\n").$detail,
+            [['Open System' => PublicUrl::to('/admin/system')]]));
         foreach (self::operators() as $email) {
             try {
                 MailSettings::apply();

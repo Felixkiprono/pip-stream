@@ -17,7 +17,7 @@ use Throwable;
  */
 class Bus
 {
-    public const PUBLISH = ['config.changed', 'billing.changed', 'tg.login.request'];
+    public const PUBLISH = ['config.changed', 'billing.changed', 'tg.login.request', 'user.command'];
 
     public const CONSUME = ['trade.executed', 'trade.failed', 'trade.closed', 'risk.limit_hit',
         'signal.rejected', 'tg.login.status'];

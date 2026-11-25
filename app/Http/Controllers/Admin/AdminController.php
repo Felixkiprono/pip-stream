@@ -244,8 +244,8 @@ class AdminController extends Controller
         } else {
             $add('Telegram', 'Intake worker', 'fail', 'not reporting: is the engine running?');
         }
-        $bot = config('pipstream.bot_token');
-        $add('Telegram', 'Alerts bot token', $bot ? 'ok' : 'warn', $bot ? '@'.config('pipstream.bot_username') : 'PS_TELEGRAM_BOT_TOKEN not set: no Telegram alerts');
+        $bot = \App\Pipstream\Bot\BotSettings::token();
+        $add('Telegram', 'PipStream bot', $bot ? 'ok' : 'warn', $bot ? '@'.\App\Pipstream\Bot\BotSettings::username().' (Admin → Telegram bot shows the webhook check)' : 'no bot token: add it in Admin → Telegram bot. No Telegram alerts until then');
 
         // ---------------------------------------------------------------- web app config
         $add('Web app', 'App key', config('app.key') ? 'ok' : 'fail', config('app.key') ? 'set' : 'APP_KEY missing');

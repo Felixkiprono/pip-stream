@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import clsx from 'clsx'
-import { Activity, Globe, BarChart3, Landmark, ArrowLeftRight, CheckCircle2, CircleAlert, CircleX, FlaskConical, Inbox, OctagonX, Play, Radio, ScrollText, Search, Send, Server, Users, Menu, X, ChevronRight, ArrowLeft, Crown, Mail, Award } from 'lucide-react'
+import { Activity, Globe, BarChart3, Landmark, ArrowLeftRight, CheckCircle2, CircleAlert, CircleX, FlaskConical, Inbox, OctagonX, Play, Radio, ScrollText, Search, Send, Server, Users, Menu, X, ChevronRight, ArrowLeft, Crown, Mail, Award, MessageCircle, Bot } from 'lucide-react'
 import { Fragment, useEffect, useState, type ReactNode } from 'react'
 import { Link, NavLink, Outlet, useLocation, useNavigate, useParams, useSearchParams } from 'react-router'
 import { Badge, Button, Card, ErrorNote, Logo, Spinner, Toggle } from '../../components/ui'
@@ -9,6 +9,7 @@ import { ThemeSwitch } from '../../components/Plan'
 import { SignOutButton } from '../../components/AppShell'
 import { ago } from '../../lib/format'
 import { useSession } from '../../lib/session'
+import { MessageCustomer } from './Bot'
 
 const NAV = [
   { to: '/admin', label: 'Overview', icon: Activity, end: true },
@@ -16,6 +17,7 @@ const NAV = [
   { to: '/admin/parser', label: 'Parser lab', icon: FlaskConical },
   { to: '/admin/review', label: 'Review', icon: Inbox },
   { to: '/admin/users', label: 'Customers', icon: Users },
+  { to: '/admin/support', label: 'Support', icon: MessageCircle },
   { to: '/admin/audit', label: 'Audit log', icon: ScrollText },
   { to: '/admin/system', label: 'System', icon: Server },
   { to: '/admin/insights', label: 'Insights', icon: BarChart3, superadmin: true },
@@ -23,6 +25,7 @@ const NAV = [
   { to: '/admin/activity', label: 'Copy activity', icon: ArrowLeftRight, superadmin: true },
   { to: '/admin/visitors', label: 'Visitors', icon: Globe, superadmin: true },
   { to: '/admin/email', label: 'Email', icon: Mail, superadmin: true },
+  { to: '/admin/bot', label: 'Telegram bot', icon: Bot, superadmin: true },
 ]
 
 export function AdminLayout() {
@@ -494,6 +497,8 @@ export function AdminUser() {
         </div>
         <div className="mt-2"><ErrorNote>{err}</ErrorNote></div>
       </Card>
+
+      <MessageCustomer userId={u.id} />
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card>

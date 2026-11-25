@@ -7,6 +7,7 @@ use App\Models\User;
 use App\Notifications\Connected;
 use App\Notifications\TradeAlert;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 /** What Laravel does with each engine event it consumes. */
@@ -80,6 +81,14 @@ class EventHandler
     private function limit(array $p): void
     {
         if ($u = $this->user($p['user_id'])) {
+            if ($p['limit'] === 'awaiting_confirm') {
+                $this->askFirst($u, $p);
+
+                return;
+            }
+            if ($p['limit'] === 'confirm_rejected') {
+                return; // the customer tapped Skip: they know
+            }
             if (in_array($p['limit'], ['duplicate_signal', 'duplicate_edit'], true)) {
                 $u->notify(new TradeAlert('signal_duplicate', 'Repeat signal not copied', $p['limit'] === 'duplicate_edit'
                     ? 'The channel edited a post you already copied. Only SL/TP changes are applied; it is never opened twice.'
@@ -93,9 +102,40 @@ class EventHandler
                 'max_open_trades' => 'you reached your open-trade limit',
                 'max_daily_loss' => 'today\'s loss limit was reached',
                 'sizing' => 'the post gave no price to size the trade from',
+                'confirm_expired' => 'you didn\'t tap Copy it within 5 minutes',
                 default => str_replace('_', ' ', $p['limit']),
             };
             $u->notify(new TradeAlert('signal_skipped', 'Signal skipped', "Not copied because {$why}.", $p));
+        }
+    }
+
+    /**
+     * "Ask me before each trade": the risk engine holds the signal (pending id in detail) and
+     * the customer gets Copy it / Skip buttons in the bot. Without a bot chat it can't ask, so the
+     * app says why the signal waits.
+     */
+    private function askFirst(User $u, array $p): void
+    {
+        $pid = (string) $p['detail'];
+        if (! Cache::add("botasked:{$pid}", 1, now()->addMinutes(10))) {
+            return; // event replayed
+        }
+        $sig = DB::table('signals')->where('id', $p['signal_id'])->first();
+        $payload = $sig ? (json_decode($sig->payload, true) ?: []) : [];
+        $line = \App\Pipstream\Bot\BotScreens::signalLine($payload + ['symbol' => $sig->symbol ?? null, 'side' => $sig->side ?? null]);
+        $ch = Channel::find($sig->channel_id ?? '')?->title ?? 'your channel';
+        $acct = DB::table('broker_accounts')->where('id', $p['broker_account_id'])->first();
+        Cache::put("botpending:{$pid}", $u->id, now()->addMinutes(6));
+        Cache::put("botpendingtext:{$pid}", trim(strtoupper((string) ($payload['side'] ?? '')).' '.($payload['symbol'] ?? '')), now()->addMinutes(6));
+        $sent = false;
+        \App\Pipstream\Bot\Bot::quietly(function () use ($u, $ch, $line, $acct, $pid, &$sent) {
+            $sent = \App\Pipstream\Bot\Bot::toUser($u, "🙋 New signal from {$ch}\n{$line}\n\nCopy it to ".($acct->label ?? 'your account')
+                .(($acct->connector ?? '') === 'paper' ? ' (practice)' : '').'? Tap within 5 minutes.',
+                [['✅ Copy it' => "cf:y:{$pid}", '✖ Skip' => "cf:n:{$pid}"]]);
+        });
+        if (! $sent) {
+            $u->notify(new TradeAlert('signal_skipped', 'Signal waiting for your OK',
+                "{$ch} posted {$line}. You asked to confirm each trade, which happens in the PipStream Telegram bot. Connect it in Settings → Telegram alerts, or turn off \"Ask me first\" for this channel.", $p));
         }
     }
 

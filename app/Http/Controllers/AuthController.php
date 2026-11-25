@@ -77,8 +77,21 @@ class AuthController extends Controller
             throw ValidationException::withMessages(['email' => 'That email and password don\'t match.']);
         }
         $r->session()->regenerate();
+        $this->signInNotice($r);
 
         return ['user' => self::present($r->user(), $accounts)];
+    }
+
+    /** "New sign-in" in the customer's PipStream bot chat, with an "It wasn't me" button. Sent after the response. */
+    private function signInNotice(Request $r): void
+    {
+        $u = $r->user();
+        $ua = (string) $r->userAgent();
+        $device = (str_contains($ua, 'iPhone') ? 'iPhone' : (str_contains($ua, 'Android') ? 'Android phone' : (str_contains($ua, 'Mac') ? 'Mac'
+            : (str_contains($ua, 'Windows') ? 'Windows computer' : 'a browser'))));
+        $text = "🔐 New sign-in to PipStream\n".now()->utc()->format('j M, H:i').' UTC · '.$device.' · IP '.$r->ip()
+            ."\n\nIf this was you, there is nothing to do.";
+        \Illuminate\Support\defer(fn () => \App\Pipstream\Bot\Bot::quietly(fn () => \App\Pipstream\Bot\Bot::toUser($u, $text, [['🔒 It wasn\'t me' => 'sec:lock']])));
     }
 
     /** "Forgot password": always the same answer, so it can't be used to find out who has an account. */

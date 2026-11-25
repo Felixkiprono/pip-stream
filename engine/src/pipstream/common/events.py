@@ -33,6 +33,7 @@ class Topic(StrEnum):
     CONFIG_CHANGED = "config.changed"
     TG_LOGIN_REQUEST = "tg.login.request"
     TG_LOGIN_STATUS = "tg.login.status"
+    USER_COMMAND = "user.command"
 
 
 # ---------------------------------------------------------------- Telegram
@@ -279,6 +280,19 @@ class TgLoginStatus(BaseModel):
     error: str | None = None
 
 
+# ---------------------------------------------------------------- customer commands
+# From the web app or the PipStream bot. Laravel can't sign trades, so it asks the risk engine:
+#   close_all       close every open trade of this customer (signed close intents)
+#   approve_signal  "Ask me before each trade": copy the held signal (pending_id)
+#   reject_signal   ... skip it
+
+class UserCommand(BaseModel):
+    command_id: str
+    user_id: str
+    action: Literal["close_all", "approve_signal", "reject_signal"]
+    pending_id: str | None = None
+
+
 TOPIC_PAYLOADS: dict[Topic, type[BaseModel]] = {
     Topic.TG_MESSAGE_NEW: TgMessage,
     Topic.TG_MESSAGE_EDITED: TgMessage,
@@ -294,6 +308,7 @@ TOPIC_PAYLOADS: dict[Topic, type[BaseModel]] = {
     Topic.CONFIG_CHANGED: ConfigChanged,
     Topic.TG_LOGIN_REQUEST: TgLoginRequest,
     Topic.TG_LOGIN_STATUS: TgLoginStatus,
+    Topic.USER_COMMAND: UserCommand,
 }
 
 

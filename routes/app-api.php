@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Admin\AdminController;
+use App\Http\Controllers\Admin\InsightsController;
 use App\Http\Controllers\Admin\MailController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\BillingController;
@@ -96,6 +97,9 @@ Route::middleware(['auth', 'active'])->group(function () {
         Route::post('users/{user}/trial', [AdminController::class, 'userTrial']);
         Route::get('audit', [AdminController::class, 'audit']);
         Route::middleware('superadmin')->group(function () {
+            Route::get('insights', [InsightsController::class, 'insights']);
+            Route::get('brokers', [InsightsController::class, 'brokers']);
+            Route::get('activity', [InsightsController::class, 'activity']);
             Route::get('mail', [MailController::class, 'show']);
             Route::put('mail', [MailController::class, 'update']);
             Route::post('mail/test', [MailController::class, 'test'])->middleware('throttle:admin-test');

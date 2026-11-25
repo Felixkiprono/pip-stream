@@ -17,7 +17,8 @@ class BrokerController extends Controller
 {
     public function __construct(private Bus $bus) {}
 
-    private function present(BrokerAccount $b): array
+    /** Also used by the superadmin's Brokers page. Never includes credentials. */
+    public function present(BrokerAccount $b): array
     {
         $status = null;
         if ($b->connector === 'metaapi') {

@@ -262,6 +262,10 @@ class AdminController extends Controller
         $slots = (int) config('pipstream.founding_slots');
         $taken = User::whereNotNull('founding_number')->count();
         $add('Web app', 'Founding members', 'ok', "{$taken} of {$slots} free-for-life spots taken");
+        $sa = User::where('email', strtolower(trim((string) config('pipstream.superadmin_email'))))->first();
+        $add('Web app', 'Superadmin', $sa?->isSuperadmin() ? 'ok' : 'warn', $sa?->isSuperadmin() ? $sa->email
+            : (config('pipstream.superadmin_password') ? 'not seeded yet: run php artisan pipstream:superadmin --seed'
+                : 'PS_SUPERADMIN_PASSWORD not set in .env'));
 
         $acc = $req->user()->telegramAccounts()->orderByDesc('created_at')->first();
 
@@ -364,12 +368,13 @@ class AdminController extends Controller
         $chan = DB::table('subscriptions')->whereIn('user_id', $ids)->selectRaw('user_id, count(*) n')->groupBy('user_id')->pluck('n', 'user_id');
         $tg = DB::table('telegram_accounts')->whereIn('user_id', $ids)->where('status', 'active')->whereNotNull('session_ciphertext')->pluck('user_id')->flip();
         $open = DB::table('positions')->whereIn('user_id', $ids)->where('status', 'open')->selectRaw('user_id, count(*) n')->groupBy('user_id')->pluck('n', 'user_id');
+        $brokers = DB::table('broker_accounts')->whereIn('user_id', $ids)->where('connector', '<>', 'paper')->selectRaw('user_id, count(*) n')->groupBy('user_id')->pluck('n', 'user_id');
 
         return ['users' => $users->map(fn ($u) => [
             'id' => $u->id, 'name' => $u->name, 'email' => $u->email, 'role' => $u->role, 'status' => $u->status,
             'paused' => (bool) $u->kill_switch, 'plan' => $u->billing?->plan_id, 'founding' => $u->founding_number, 'billing' => $u->billing?->status,
             'channels' => (int) ($chan[$u->id] ?? 0), 'open_trades' => (int) ($open[$u->id] ?? 0),
-            'telegram' => isset($tg[$u->id]), 'joined' => $u->created_at])];
+            'telegram' => isset($tg[$u->id]), 'brokers' => (int) ($brokers[$u->id] ?? 0), 'joined' => $u->created_at, 'last_seen' => $u->last_seen_at])];
     }
 
     /** One customer: everything support needs on one screen. Never returns credentials or sessions. */
@@ -380,7 +385,7 @@ class AdminController extends Controller
 
         return [
             'user' => ['id' => $user->id, 'name' => $user->name, 'email' => $user->email, 'role' => $user->role, 'founding' => $user->founding_number,
-                'status' => $user->status, 'paused' => (bool) $user->kill_switch, 'joined' => $user->created_at],
+                'status' => $user->status, 'paused' => (bool) $user->kill_switch, 'joined' => $user->created_at, 'last_seen' => $user->last_seen_at],
             'billing' => $b ? ['plan' => $b->plan_id, 'status' => $b->status, 'period_end' => $b->current_period_end, 'provider' => $b->provider] : null,
             'telegram' => $user->telegramAccounts()->orderByDesc('created_at')->get()->map(fn ($a) => [
                 'id' => $a->id, 'status' => $a->status, 'linked' => $a->isLinked(), 'phone_hint' => $a->phone_hint,

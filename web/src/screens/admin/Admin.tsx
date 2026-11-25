@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import clsx from 'clsx'
-import { Activity, CheckCircle2, CircleAlert, CircleX, FlaskConical, Inbox, OctagonX, Play, Radio, ScrollText, Search, Send, Server, Users, Menu, X, ChevronRight, ArrowLeft, Crown, Mail, Award } from 'lucide-react'
+import { Activity, BarChart3, Landmark, ArrowLeftRight, CheckCircle2, CircleAlert, CircleX, FlaskConical, Inbox, OctagonX, Play, Radio, ScrollText, Search, Send, Server, Users, Menu, X, ChevronRight, ArrowLeft, Crown, Mail, Award } from 'lucide-react'
 import { Fragment, useEffect, useState, type ReactNode } from 'react'
 import { Link, NavLink, Outlet, useLocation, useNavigate, useParams, useSearchParams } from 'react-router'
 import { Badge, Button, Card, ErrorNote, Logo, Spinner, Toggle } from '../../components/ui'
@@ -17,6 +17,9 @@ const NAV = [
   { to: '/admin/users', label: 'Customers', icon: Users },
   { to: '/admin/audit', label: 'Audit log', icon: ScrollText },
   { to: '/admin/system', label: 'System', icon: Server },
+  { to: '/admin/insights', label: 'Insights', icon: BarChart3, superadmin: true },
+  { to: '/admin/brokers', label: 'Brokers', icon: Landmark, superadmin: true },
+  { to: '/admin/activity', label: 'Copy activity', icon: ArrowLeftRight, superadmin: true },
   { to: '/admin/email', label: 'Email', icon: Mail, superadmin: true },
 ]
 
@@ -304,6 +307,7 @@ export function AdminReview() {
 type AdminUserRow = {
   id: string; name: string | null; email: string; role: string; status: string; paused: boolean; plan: string | null
   founding?: number | null; billing: string | null; channels: number; open_trades: number; telegram: boolean; joined: string
+  brokers?: number; last_seen?: string | null
 }
 
 function UserBadges({ u }: { u: { role: string; status: string; paused: boolean; plan?: string | null; founding?: number | null } }) {
@@ -371,7 +375,7 @@ export function AdminUsers() {
                     <span className="flex flex-wrap items-center gap-1.5 font-semibold">{u.name || '—'} <UserBadges u={u} /></span>
                     <span className="block truncate text-sm text-ink-2">{u.email}</span>
                     <span className="mt-1 block text-xs text-ink-3">
-                      {u.plan ?? 'no plan'}{u.billing ? ` · ${u.billing}` : ''} · {u.telegram ? 'Telegram linked' : 'no Telegram'} · {u.channels} ch · {u.open_trades} open
+                      {u.plan ?? 'no plan'}{u.billing ? ` · ${u.billing}` : ''} · {u.telegram ? 'Telegram linked' : 'no Telegram'} · {u.channels} ch · {u.brokers ?? 0} broker · {u.open_trades} open{u.last_seen ? ` · seen ${ago(u.last_seen)}` : ''}
                     </span>
                   </span>
                   <ChevronRight className="size-5 shrink-0 text-ink-3" />
@@ -383,7 +387,7 @@ export function AdminUsers() {
           <Card className="hidden overflow-x-auto p-0 md:block">
             <table className="w-full text-left text-sm">
               <thead className="text-ink-3">
-                <tr className="border-b border-line">{['Customer', 'Plan', 'Telegram', 'Channels', 'Open', 'Joined'].map((h) => <th key={h} className="px-4 py-3 font-semibold">{h}</th>)}</tr>
+                <tr className="border-b border-line">{['Customer', 'Plan', 'Telegram', 'Channels', 'Brokers', 'Open', 'Last seen', 'Joined'].map((h) => <th key={h} className="px-4 py-3 font-semibold">{h}</th>)}</tr>
               </thead>
               <tbody className="divide-y divide-line">
                 {users.map((u) => (
@@ -395,7 +399,9 @@ export function AdminUsers() {
                     <td className="px-4 py-3">{u.plan ?? '—'} <span className="block text-ink-3">{u.billing}</span></td>
                     <td className="px-4 py-3">{u.telegram ? <Badge tone="up">linked</Badge> : <Badge>no</Badge>}</td>
                     <td className="px-4 py-3 tabular">{u.channels}</td>
+                    <td className="px-4 py-3 tabular">{u.brokers ?? 0}</td>
                     <td className="px-4 py-3 tabular">{u.open_trades}</td>
+                    <td className="px-4 py-3 text-ink-3">{u.last_seen ? ago(u.last_seen) : '—'}</td>
                     <td className="px-4 py-3 text-ink-3">{ago(u.joined)}</td>
                   </tr>
                 ))}
@@ -409,7 +415,7 @@ export function AdminUsers() {
 }
 
 type UserDetail = {
-  user: { id: string; name: string | null; email: string; role: string; founding?: number | null; status: string; paused: boolean; joined: string }
+  user: { id: string; name: string | null; email: string; role: string; founding?: number | null; status: string; paused: boolean; joined: string; last_seen?: string | null }
   billing: { plan: string; status: string; period_end: string | null; provider: string | null } | null
   telegram: { id: string; status: string; linked: boolean; phone_hint: string | null; last_error: string | null; since: string }[]
   channels: { id: string; title: string; username: string | null; active: boolean; mode: string | null; enabled: boolean | null; sizing_mode: string | null }[]
@@ -431,6 +437,7 @@ function Row({ k, children }: { k: string; children: ReactNode }) {
 /** One customer, everything support needs, plus the actions an admin takes. */
 export function AdminUser() {
   const { id } = useParams()
+  const { user } = useSession()
   const qc = useQueryClient()
   const q = useQuery({ queryKey: ['admin', 'user', id], queryFn: () => api<UserDetail>(`admin/users/${id}`) })
   const [err, setErr] = useState('')
@@ -452,7 +459,7 @@ export function AdminUser() {
       <Link to="/admin/users" className="mb-3 inline-flex items-center gap-1 text-sm font-semibold text-ink-3 hover:text-ink"><ArrowLeft className="size-4" /> Customers</Link>
       <div className="mb-5">
         <h1 className="flex flex-wrap items-center gap-2 text-2xl font-bold tracking-tight">{u.name || u.email} <UserBadges u={{ ...u, plan: d.billing?.plan }} /></h1>
-        <p className="text-ink-2 break-all">{u.email} · joined {ago(u.joined)}</p>
+        <p className="text-ink-2 break-all">{u.email} · joined {ago(u.joined)}{u.last_seen ? ` · seen ${ago(u.last_seen)}` : ''}{user?.role === 'superadmin' && <> · <Link to={`/admin/activity?user=${u.id}`} className="font-semibold text-brand">all copy activity</Link></>}</p>
       </div>
 
       <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">

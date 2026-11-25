@@ -37,6 +37,9 @@ const Admin = {
   User: lazy(() => import('./screens/admin/Admin').then((m) => ({ default: m.AdminUser }))),
   System: lazy(() => import('./screens/admin/Admin').then((m) => ({ default: m.AdminSystem }))),
   Email: lazy(() => import('./screens/admin/Email')),
+  Insights: lazy(() => import('./screens/admin/Insights')),
+  Brokers: lazy(() => import('./screens/admin/Insights').then((m) => ({ default: m.AdminBrokers }))),
+  Activity: lazy(() => import('./screens/admin/Insights').then((m) => ({ default: m.AdminActivity }))),
 }
 
 function RequireUser({ admin, children }: { admin?: boolean; children: ReactNode }) {
@@ -98,6 +101,9 @@ export default function App() {
           <Route path="audit" element={<Admin.Audit />} />
           <Route path="system" element={<Admin.System />} />
           <Route path="email" element={<Admin.Email />} />
+          <Route path="insights" element={<Admin.Insights />} />
+          <Route path="brokers" element={<Admin.Brokers />} />
+          <Route path="activity" element={<Admin.Activity />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

@@ -6,6 +6,7 @@ import { Link, NavLink, Outlet, useLocation, useNavigate, useParams, useSearchPa
 import { Badge, Button, Card, ErrorNote, Logo, Spinner, Toggle } from '../../components/ui'
 import { api, post, put } from '../../lib/api'
 import { ThemeSwitch } from '../../components/Plan'
+import { SignOutButton } from '../../components/AppShell'
 import { ago } from '../../lib/format'
 import { useSession } from '../../lib/session'
 
@@ -45,11 +46,12 @@ export function AdminLayout() {
       <NavLink to="/app" className="mt-2 flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-ink-3 hover:bg-surface-2 md:mt-4 md:py-2">
         ← Customer app
       </NavLink>
+      <SignOutButton className="md:py-2 md:text-sm" />
       <div className="mt-3 px-1"><ThemeSwitch compact /></div>
     </>
   )
   return (
-    <div className="min-h-dvh md:grid md:grid-cols-[232px_1fr]">
+    <div className="min-h-dvh md:pl-[232px]">
       {/* phones: top bar + slide-down menu */}
       <header className="sticky top-0 z-30 border-b border-line bg-surface/95 backdrop-blur-lg safe-top md:hidden">
         <div className="flex h-14 items-center gap-3 px-4">
@@ -64,7 +66,7 @@ export function AdminLayout() {
       </header>
       {open && <div className="fixed inset-0 z-20 bg-black/40 md:hidden" onClick={() => setOpen(false)} />}
       {/* tablets and up: sidebar */}
-      <aside className="sticky top-0 hidden h-dvh flex-col border-r border-line bg-surface md:flex">
+      <aside className="fixed inset-y-0 left-0 z-30 hidden w-[232px] flex-col border-r border-line bg-surface md:flex">
         <div className="flex h-16 items-center justify-between px-4">
           <Logo size={24} />
           <Badge tone="warn">Admin</Badge>

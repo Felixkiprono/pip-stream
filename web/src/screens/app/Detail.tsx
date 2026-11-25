@@ -208,8 +208,8 @@ export default function Detail({ kind }: { kind: 'alerts' | 'trades' | 'signals'
   const nav = useNavigate()
   const q = useQuery({ queryKey: ['detail', kind, id], queryFn: () => api<Resp>(`${kind}/${id}`) })
   return (
-    <div className="anim-rise px-4 safe-top md:px-0">
-      <header className="flex h-16 items-center gap-2 md:h-20">
+    <div className="anim-rise px-4 md:px-0">
+      <header className="page-bar flex items-center gap-2">
         <button onClick={() => (history.length > 1 ? nav(-1) : nav('/app'))} className="-ml-2 grid size-10 place-items-center rounded-full text-ink-2 hover:bg-surface-2" aria-label="Back">
           <ArrowLeft className="size-5" />
         </button>

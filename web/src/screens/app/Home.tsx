@@ -86,8 +86,8 @@ export default function Home() {
   }
 
   return (
-    <div className="anim-rise space-y-5 px-4 safe-top md:px-0">
-      <header className="flex h-16 items-center justify-between gap-2 md:h-20">
+    <div className="anim-rise space-y-5 px-4 md:px-0">
+      <header className="page-bar flex items-center justify-between gap-2">
         <span className="flex items-center gap-2 md:hidden"><Logo size={26} />{user?.beta && <BetaPill />}</span>
         <h1 className="hidden text-3xl font-bold tracking-tight md:block">Home</h1>
         <span className="flex items-center gap-1">

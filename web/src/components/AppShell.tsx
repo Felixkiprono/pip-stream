@@ -1,7 +1,9 @@
 import clsx from 'clsx'
-import { Bell, CreditCard, Home, Landmark, List, Radio, Settings, Shield } from 'lucide-react'
+import { useQueryClient } from '@tanstack/react-query'
+import { Bell, CreditCard, Home, Landmark, List, LogOut, Radio, Settings, Shield } from 'lucide-react'
 import type { ReactNode } from 'react'
-import { NavLink, Outlet } from 'react-router'
+import { NavLink, Outlet, useNavigate } from 'react-router'
+import { post } from '../lib/api'
 import { useLiveUpdates } from '../lib/live'
 import { isAdmin, useSession } from '../lib/session'
 import { BetaPill, CrownMark, PlanBadge, ThemeSwitch } from './Plan'
@@ -19,6 +21,24 @@ const MORE = [
   { to: '/app/brokers', label: 'Brokers', icon: Landmark },
   { to: '/app/billing', label: 'Plan & billing', icon: CreditCard },
 ]
+
+/** Sign out and land on the home page. Used by the app and the admin console. */
+export function SignOutButton({ className }: { className?: string }) {
+  const qc = useQueryClient()
+  const nav = useNavigate()
+  return (
+    <button
+      className={clsx('flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-[15px] font-semibold text-down hover:bg-down-soft', className)}
+      onClick={async () => {
+        await post('auth/logout').catch(() => {})
+        qc.clear()
+        nav('/', { replace: true })
+      }}
+    >
+      <LogOut className="size-5" /> Sign out
+    </button>
+  )
+}
 
 function Count({ n, className }: { n?: number; className?: string }) {
   if (!n) return null
@@ -45,8 +65,9 @@ export function AppShell({ badge }: { badge?: number }) {
     </NavLink>
   )
   return (
-    <div className="min-h-dvh md:grid md:grid-cols-[232px_1fr] lg:grid-cols-[256px_1fr]">
-      <aside className="sticky top-0 hidden h-dvh flex-col border-r border-line bg-surface md:flex">
+    <div className="min-h-dvh md:pl-[232px] lg:pl-[256px]">
+      {/* fixed, so the menu and profile never scroll away with the page */}
+      <aside className="fixed inset-y-0 left-0 z-30 hidden w-[232px] flex-col border-r border-line bg-surface md:flex lg:w-[256px]">
         <div className="flex h-16 items-center gap-2 px-5">
           <Logo size={26} />
           {user?.beta && <BetaPill />}
@@ -63,6 +84,7 @@ export function AppShell({ badge }: { badge?: number }) {
                 <PlanBadge plan={user?.plan} />
               </span>
             </div>
+            <SignOutButton />
             <ThemeSwitch compact />
           </div>
         </nav>
@@ -95,8 +117,9 @@ export function AppShell({ badge }: { badge?: number }) {
 
 export function Page({ title, right, children }: { title: ReactNode; right?: ReactNode; children: ReactNode }) {
   return (
-    <div className="anim-rise px-4 safe-top md:px-0">
-      <header className="flex h-16 items-center justify-between gap-3 md:h-20">
+    <div className="anim-rise px-4 md:px-0">
+      {/* stays at the top while the page scrolls */}
+      <header className="page-bar flex items-center justify-between gap-3">
         <h1 className="text-[26px] font-bold tracking-tight md:text-3xl">{title}</h1>
         {right}
       </header>

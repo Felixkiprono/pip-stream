@@ -9,7 +9,7 @@ Laravel (React UI) -> `tg.login.request` -> intake talks to Telegram -> `tg.logi
     list_channels            -> channels [{tg_chat_id, title, username, kind}]  (channels and
                                 groups the account is in, kind = channel | group)
     test                     -> test_ok {name, username, live} after a note to the account's own
-                                Saved Messages (admin System page: proves the session works)
+                                Saved Messages (Settings / admin System page: proves the session works)
     logout                   -> logged_out (session revoked at Telegram and wiped here)
 
 On `linked` the session string is sealed to intake's own public key and stored in
@@ -283,7 +283,7 @@ class LoginFlow:
     async def _step_test(self, req: TgLoginRequest, row, trace_id: str) -> None:
         stamp = time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime())
         text = (f"PipStream test ✓ This Telegram account is connected and PipStream can read your channels.\n"
-                f"Sent from the admin System page at {stamp}. Only you can see this note.")
+                f"Connection check at {stamp}. Only you can see this note.")
         src = self.live_source(req.telegram_account_id)
         if src is not None:  # the reader that is already connected: also proves it is live
             me = await src.whoami()

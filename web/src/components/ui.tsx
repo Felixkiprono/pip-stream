@@ -131,7 +131,7 @@ export function ErrorNote({ children }: { children: ReactNode }) {
 /** Full-height onboarding step: back arrow, progress bar, content, sticky action at the bottom. */
 export function Step({
   step,
-  of = 6,
+  of = 7,
   title,
   subtitle,
   art,

@@ -73,7 +73,7 @@ export default function Style() {
   const n = chans.data?.channels.length ?? 0
   return (
     <Step
-      step={5}
+      step={6}
       title="How big should each trade be?"
       subtitle={`PipStream sizes every copy from your balance and the signal's stop loss. This applies to your ${n || ''} channel${n === 1 ? '' : 's'}; you can change it per channel later.`}
       action={

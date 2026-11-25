@@ -36,7 +36,7 @@ SERVICES: dict[str, ServicePerms] = {
                            T.TG_LOGIN_STATUS}),
         consume=frozenset({T.TG_MESSAGE_NEW, T.TG_MESSAGE_EDITED, T.TG_LOGIN_REQUEST}),
         broadcast=frozenset({T.CONFIG_CHANGED}),
-        rw_keys=("ps:dedupe:*", "ps:lease:*", "ps:editver:*"),
+        rw_keys=("ps:dedupe:*", "ps:lease:*", "ps:editver:*", "ps:chtest:*"),
         # login requests carry the phone, code and 2FA password: intake deletes each once handled
         extra=("(+xdel ~ps:stream:tg.login.request)",),
     ),
@@ -46,6 +46,7 @@ SERVICES: dict[str, ServicePerms] = {
         consume=frozenset({T.SIGNAL_PARSED}),
         broadcast=frozenset({T.CONFIG_CHANGED, T.BILLING_CHANGED}),
         ro_keys=("ps:acct:*", "ps:quote:*", "ps:killswitch:*"),
+        rw_keys=("ps:chtest:*",),  # channel self-tests: writes what it would copy
     ),
     # executor = execution router + position tracker (holds broker credentials)
     "executor": ServicePerms(
@@ -64,7 +65,7 @@ SERVICES: dict[str, ServicePerms] = {
         publish=frozenset({T.CONFIG_CHANGED, T.BILLING_CHANGED, T.TG_LOGIN_REQUEST}),
         consume=frozenset({T.TRADE_EXECUTED, T.TRADE_FAILED, T.TRADE_CLOSED, T.RISK_LIMIT_HIT,
                            T.SIGNAL_REJECTED, T.TG_LOGIN_STATUS}),
-        rw_keys=("ps:killswitch:*", "ps:eares:*", "ps:quote:*", "ps:paper:*"),
+        rw_keys=("ps:killswitch:*", "ps:eares:*", "ps:quote:*", "ps:paper:*", "ps:chtest:*"),
         ro_keys=("ps:health:*", "ps:acct:*", "ps:lease:*"),
         # EA bridge: hands queued commands to the EA (read only) and stores its answers (ps:eares:*)
         extra=("(+@all -@admin -@dangerous ~laravel:*)", "(+xrevrange %R~ps:acct:*:ea:cmd)"),

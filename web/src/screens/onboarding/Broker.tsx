@@ -110,7 +110,7 @@ export default function Broker() {
   const [saved, setSaved] = useState(false)
   return (
     <Step
-      step={4}
+      step={5}
       title="Where should trades go?"
       subtitle="Start on practice money and switch to your real broker whenever you're ready."
       action={

@@ -57,7 +57,7 @@ export default function Channels() {
       await refresh()
       qc.invalidateQueries({ queryKey: ['tg-channels'] })
       qc.invalidateQueries({ queryKey: ['channels'] })
-      nav(fromApp ? '/app/channels' : '/start/broker')
+      nav(fromApp ? '/app/channels' : '/start/test')
     } catch (e) {
       setErr((e as Error).message)
     } finally {
@@ -73,7 +73,7 @@ export default function Channels() {
       title="Which chats should we copy?"
       subtitle="These are the channels and groups on your Telegram. Pick the ones that post trading signals."
       action={
-        <Button block busy={busy} disabled={!fresh.length && !already} onClick={() => (fresh.length ? follow() : nav(fromApp ? '/app/channels' : '/start/broker'))}>
+        <Button block busy={busy} disabled={!fresh.length && !already} onClick={() => (fresh.length ? follow() : nav(fromApp ? '/app/channels' : '/start/test'))}>
           {fresh.length ? `Copy ${fresh.length} chat${fresh.length > 1 ? 's' : ''}` : already ? 'Continue' : 'Pick at least one'}
         </Button>
       }

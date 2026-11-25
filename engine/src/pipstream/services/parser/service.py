@@ -9,9 +9,12 @@ from __future__ import annotations
 
 import asyncio
 
-from ...common.events import Event, ParsedSignal, SignalRejected, SignalSource, TgMessage, Topic
+from datetime import datetime, timezone
+
+from ...common.events import Event, ParsedSignal, SelfTest, SignalRejected, SignalSource, TgMessage, Topic
 from ...common.log import ctx
 from ...common.service import Context, run
+from . import selftest
 from .engine import ParserProfile, SignalParser, SymbolCatalog
 
 
@@ -49,6 +52,9 @@ class ParserService:
             return
         source = SignalSource(message_id=msg.message_id, reply_to_id=msg.reply_to_id,
                               edit_version=msg.edit_version, posted_at=msg.posted_at)
+        if code := selftest.find_code(msg.text):
+            await self._self_test(code, msg, source, profile, ev.trace_id)
+            return
         if msg.has_media and not msg.text.strip():
             result_rej = SignalRejected(channel_id=msg.channel_id, source=source, reason="media_only",
                                         raw_text="")
@@ -64,6 +70,48 @@ class ParserService:
                 await self.on_result(msg, res.signal, res.rejected)
             except Exception:
                 self.c.log.exception("on_result hook failed", extra=ctx(trace_id=ev.trace_id))
+
+    async def _self_test(self, code: str, msg: TgMessage, source: SignalSource, profile: ParserProfile,
+                         trace_id: str) -> None:
+        """A post with a self-test code. It never reaches other customers' rules: it goes to the
+        risk engine only for the customer who started the test, marked so nothing is placed
+        unless they asked for it."""
+        p = self.c.settings.stream_prefix
+        meta = await selftest.load_meta(self.c.redis, p, code)
+        log = ctx(trace_id=trace_id, channel_id=msg.channel_id, code=code)
+        if meta is None:
+            self.c.log.info("self-test code unknown or expired; post ignored", extra=log)
+            return
+        tid = meta["test_id"]
+        arrived = {"channel_id": msg.channel_id, "message_id": msg.message_id, "edit_version": msg.edit_version,
+                   "posted_at": msg.posted_at.isoformat() if msg.posted_at else None,
+                   "received_at": datetime.now(timezone.utc).isoformat()}
+        if msg.channel_id != meta["channel_id"]:
+            await selftest.update(self.c.redis, p, tid, state="wrong_channel", arrived=arrived, done=True)
+            self.c.log.info("self-test code posted in another channel", extra=log)
+            return
+        text = selftest.strip_code(msg.text)
+        if not text:
+            await selftest.update(self.c.redis, p, tid, state="received", arrived=arrived, done=True,
+                                  parse={"status": "ping"})
+            self.c.log.info("self-test ping received", extra=log)
+            return
+        res = self.parser.parse(text, channel_id=msg.channel_id, source=source, profile=profile)
+        if res.signal is None:
+            await selftest.update(self.c.redis, p, tid, state="received", arrived=arrived, done=True,
+                                  parse={"status": "rejected", "reason": res.rejected.reason,
+                                         "confidence": res.rejected.confidence, "issues": res.issues})
+            return
+        sig = res.signal.model_copy(update={"test": SelfTest(test_id=tid, user_id=meta["user_id"],
+                                                             place=bool(meta.get("place")))})
+        await selftest.update(self.c.redis, p, tid, state="received", arrived=arrived, done=False,
+                              parse={"status": "parsed", "confidence": sig.confidence, "issues": res.issues,
+                                     "signal": sig.model_dump(mode="json", by_alias=True, exclude={"test"})})
+        self.c.log.info("self-test signal parsed", extra=log)
+        if sig.test.place:  # a real (practice or broker) trade: stored like any signal so it shows in Trades
+            await self._emit_parsed(sig, trace_id)
+        else:
+            await self.c.bus.publish(Topic.SIGNAL_PARSED, sig, trace_id=trace_id)
 
     async def _emit_parsed(self, sig: ParsedSignal, trace_id: str) -> None:
         row = await self.c.db.fetchrow(

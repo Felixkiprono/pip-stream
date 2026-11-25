@@ -58,7 +58,7 @@ export default function Plan() {
   const paid = q.data?.plans.find((p) => p.id === pick)?.price
   return (
     <Step
-      step={6}
+      step={7}
       title="Your plan"
       subtitle="Everything is free while you practise. Go Pro when you want real trades."
       action={

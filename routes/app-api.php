@@ -51,6 +51,7 @@ Route::middleware(['auth', 'active'])->group(function () {
     Route::get('telegram/requests/{rid}', [TelegramController::class, 'request']);
     Route::get('telegram/channels', [TelegramController::class, 'channels']);
     Route::post('telegram/disconnect', [TelegramController::class, 'disconnect']);
+    Route::post('telegram/test', [TelegramController::class, 'test'])->middleware('throttle:admin-test');
 
     // ------------------------------------------------------------ channels + copy style
     Route::get('channels', [ChannelController::class, 'index']);
@@ -58,6 +59,9 @@ Route::middleware(['auth', 'active'])->group(function () {
     Route::delete('channels/{channel}', [ChannelController::class, 'unfollow']);
     Route::get('styles', [ChannelController::class, 'styles']);
     Route::put('channels/{channel}/rule', [ChannelController::class, 'rule']);
+    Route::get('channels/{channel}/check', [ChannelController::class, 'check']);
+    Route::post('channels/{channel}/test', [ChannelController::class, 'startTest'])->middleware('throttle:writes');
+    Route::get('channels/{channel}/test/{test}', [ChannelController::class, 'test']);
 
     // ------------------------------------------------------------ brokers
     Route::get('brokers', [BrokerController::class, 'index']);

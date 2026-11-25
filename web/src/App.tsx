@@ -12,6 +12,7 @@ import Channels from './screens/onboarding/Channels'
 import Done from './screens/onboarding/Done'
 import Plan from './screens/onboarding/Plan'
 import Style from './screens/onboarding/Style'
+import TestChannel from './screens/onboarding/TestChannel'
 import { TgCode, TgLinked, TgPassword, TgPhone, TgQr } from './screens/onboarding/Telegram'
 import Welcome from './screens/onboarding/Welcome'
 import { ForgotPassword, ResetPassword } from './screens/onboarding/Password'
@@ -73,6 +74,7 @@ export default function App() {
         <Route path="/start/qr" element={<RequireUser><TgQr /></RequireUser>} />
         <Route path="/start/linked" element={<RequireUser><TgLinked /></RequireUser>} />
         <Route path="/start/channels" element={<RequireUser><Channels /></RequireUser>} />
+        <Route path="/start/test" element={<RequireUser><TestChannel /></RequireUser>} />
         <Route path="/start/broker" element={<RequireUser><Broker /></RequireUser>} />
         <Route path="/start/style" element={<RequireUser><Style /></RequireUser>} />
         <Route path="/start/plan" element={<RequireUser><Plan /></RequireUser>} />

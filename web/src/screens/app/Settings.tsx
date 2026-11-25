@@ -18,7 +18,7 @@ function Row({ icon, title, sub, right, to }: { icon: ReactNode; title: string; 
       <span className="grid size-10 shrink-0 place-items-center rounded-2xl bg-surface-2 text-ink-2">{icon}</span>
       <span className="min-w-0 flex-1">
         <span className="block font-semibold">{title}</span>
-        {sub && <span className="block truncate text-sm text-ink-3">{sub}</span>}
+        {sub && <span className="block line-clamp-3 text-sm text-ink-3">{sub}</span>}
       </span>
       {right ?? (to && <ChevronRight className="size-5 text-ink-3" />)}
     </>
@@ -91,6 +91,21 @@ export default function Settings() {
     qc.setQueryData(['settings'], await put<S>('settings', body))
   }
   const linked = tg.data?.account?.linked
+  const [tgTest, setTgTest] = useState<{ busy?: boolean; ok?: boolean; text?: string } | null>(null)
+  async function testTelegram() {
+    setTgTest({ busy: true })
+    try {
+      const r = await settle(await post<TgStatus & { info?: { name?: string; username?: string | null; live?: boolean } }>('telegram/test'))
+      if (r.status === 'test_ok') {
+        const who = r.info?.username ? `@${r.info.username}` : r.info?.name || 'your account'
+        setTgTest({ ok: true, text: `Working: signed in as ${who}${r.info?.live ? ', reading your channels now' : ''}. We left a note in your Saved Messages.` })
+      } else {
+        setTgTest({ ok: false, text: r.error ? `Not working: ${r.error}. Connect Telegram again.` : 'Not working. Connect Telegram again.' })
+      }
+    } catch (e) {
+      setTgTest({ ok: false, text: (e as Error).message })
+    }
+  }
 
   return (
     <Page title="Settings">
@@ -139,9 +154,16 @@ export default function Settings() {
             <Row
               icon={<Send className="size-5 text-tg" />}
               title="Telegram"
-              sub={linked ? `Connected · ···${tg.data?.account?.phone_hint}` : 'Not connected'}
+              sub={
+                tgTest?.text ? <span className={tgTest.ok ? 'text-up' : 'text-down'}>{tgTest.text}</span>
+                  : tgTest?.busy ? 'Checking…' : linked ? `Connected · ···${tg.data?.account?.phone_hint}` : 'Not connected'
+              }
               right={
                 linked ? (
+                  <span className="flex shrink-0 items-center gap-3">
+                  <button className="text-sm font-semibold text-brand disabled:opacity-50" disabled={tgTest?.busy} onClick={testTelegram}>
+                    Test
+                  </button>
                   <button
                     className="text-sm font-semibold text-down"
                     onClick={async () => {
@@ -154,6 +176,7 @@ export default function Settings() {
                   >
                     Disconnect
                   </button>
+                  </span>
                 ) : (
                   <Link to="/start/telegram" className="text-sm font-semibold text-brand">Connect</Link>
                 )

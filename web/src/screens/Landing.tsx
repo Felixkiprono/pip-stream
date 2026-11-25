@@ -1,7 +1,7 @@
 import clsx from 'clsx'
 import {
   ArrowRight, BarChart3, BellRing, Brain, Check, ChevronDown, Cpu, Eye, Gauge, KeyRound, Landmark, Lock, MessageSquareText, OctagonX,
-  QrCode, Radio, Reply, Scale, ShieldCheck, Smartphone, Sparkles, Zap,
+  CheckCircle2, FlaskConical, QrCode, Radio, Reply, Scale, ShieldCheck, Smartphone, Sparkles, Zap,
 } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { useEffect, useState, type ReactNode } from 'react'
@@ -35,6 +35,7 @@ export default function Landing() {
       <Flow />
       <Understands />
       <Setup />
+      <TryIt />
       <Safety />
       <Features />
       <Pricing />
@@ -413,11 +414,12 @@ function Setup() {
   const steps: [typeof Radio, string, string][] = [
     [QrCode, 'Connect Telegram', 'Scan a QR from Telegram → Devices, or use your number and code. Takes 30 seconds.'],
     [Radio, 'Pick your chats', 'We list the channels and groups you already follow. Tap the ones that post signals.'],
-    [Gauge, 'Choose your style', 'Careful, Balanced or Bold. Start on practice money; go live with MT5 or Deriv when you trust it.'],
+    [FlaskConical, 'Test it with a post', 'Post a one-time test code in your channel and watch PipStream read it and build the trade, live. Nothing is traded.'],
+    [Gauge, 'Choose your style', 'Careful, Balanced or Bold. Start on practice money; go live with MetaTrader or Deriv when you trust it.'],
   ]
   return (
-    <Section eyebrow="Setup" title="Copying in three minutes" sub="No bots to add to channels, no software to install, no admin rights needed.">
-      <ol className="grid gap-4 md:grid-cols-3">
+    <Section eyebrow="Setup" title="Copying in four easy steps" sub="No bots to add to channels, no software to install, no admin rights needed.">
+      <ol className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         {steps.map(([Icon, t, d], i) => (
           <li key={t} className="relative overflow-hidden rounded-[24px] border border-line bg-surface p-6">
             <span className="absolute -top-4 -right-1 text-[96px] leading-none font-black text-surface-2 select-none">{i + 1}</span>
@@ -428,6 +430,63 @@ function Setup() {
         ))}
       </ol>
       <div className="mt-8"><Cta>Start now, it's free</Cta></div>
+    </Section>
+  )
+}
+
+/** "Try before you trust": the channel self-test, shown as it looks in the app. */
+function TryIt() {
+  const checks: [string, string][] = [
+    ['Post arrived', '1.2 s after you posted it'],
+    ['Read as a signal', 'BUY XAUUSD at market · SL 4039 · TP 4064'],
+    ['Would be copied', '0.05 lots of XAUUSD to your Practice account'],
+  ]
+  return (
+    <Section
+      id="test"
+      eyebrow="Try before you trust"
+      title="Test your channel before a single trade"
+      sub="Right after you pick your channels, PipStream gives you a one-time test code. Post it in your channel, with a sample signal, and watch the post arrive, get read and turn into a practice trade. You can run the test again any time from Channels."
+    >
+      <div className="grid items-center gap-8 md:grid-cols-2">
+        <ol className="space-y-4">
+          {[
+            ['Get your code', 'Tap Test this channel. You get a short code like PS-7K3QXM and a sample signal to paste.'],
+            ['Post it in your channel', 'From your own Telegram, in the channel you want to copy. A post with the code is never copied to anyone else.'],
+            ['See exactly what would happen', 'How fast it arrived, how it was read, and the trade size your settings give it. Nothing is traded unless you choose to.'],
+            ["Can't post in the channel?", 'The test screen also lists the latest posts PipStream read from it and how each was understood.'],
+          ].map(([t, d], i) => (
+            <li key={t} className="flex gap-4">
+              <span className="grid size-9 shrink-0 place-items-center rounded-full bg-brand-soft font-bold text-brand">{i + 1}</span>
+              <span>
+                <span className="block font-bold">{t}</span>
+                <span className="block text-[15px] text-ink-2">{d}</span>
+              </span>
+            </li>
+          ))}
+        </ol>
+        <div className="rounded-[28px] border border-line bg-surface p-5 shadow-card">
+          <p className="text-xs font-semibold tracking-wider text-ink-3 uppercase">Your channel</p>
+          <div className="mt-2 ml-auto max-w-[85%] rounded-2xl rounded-br-md bg-tg/10 px-3 py-2 font-mono text-[13px] whitespace-pre-wrap">
+            {'PipStream test PS-7K3QXM\nXAUUSD BUY NOW 4049\nSL 4039\nTP 4064'}
+          </div>
+          <p className="mt-5 text-xs font-semibold tracking-wider text-ink-3 uppercase">PipStream, live</p>
+          <ul className="mt-2 space-y-2 rounded-2xl bg-surface-2 p-4 text-sm">
+            {checks.map(([t, d]) => (
+              <li key={t} className="flex items-start gap-2">
+                <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-up" />
+                <span>
+                  <span className="block font-semibold">{t}</span>
+                  <span className="block text-ink-2">{d}</span>
+                </span>
+              </li>
+            ))}
+            <li className="flex items-center gap-2 text-ink-3">
+              <FlaskConical className="size-4 text-brand" /> Preview only: no trade was opened
+            </li>
+          </ul>
+        </div>
+      </div>
     </Section>
   )
 }
@@ -519,6 +578,7 @@ function Faq() {
   const qa: [string, string][] = [
     ['Can PipStream read my private chats?', 'No. It only reads the channels and groups you pick, and it never posts anything. You can disconnect any time, in the app or from Telegram’s Devices list.'],
     ['Do I need to be the channel admin?', 'No. If you can see the channel or group in your Telegram, PipStream can copy it.'],
+    ['How do I know my channel will copy properly?', 'Test it. After you pick a channel, post the one-time test code we give you in it and watch PipStream read the post and show the trade it would open, on practice money. You can test again any time from Channels.'],
     ['How fast is it?', 'Usually 100–300 ms from the post to your broker’s confirmation. Most of that is Telegram delivering the message.'],
     ['Which brokers work?', 'Any broker on MetaTrader 5 (Exness, IC Markets, XM, HFM and more) and Deriv. Everyone also gets a free practice account.'],
     ['What if a post is not a clear signal?', 'Nothing is traded. PipStream only acts on posts it reads with high confidence, and tells you when it skips one and why.'],

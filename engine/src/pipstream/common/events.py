@@ -80,6 +80,15 @@ class OptionsSpec(BaseModel):
     stake: float | None = None
 
 
+class SelfTest(BaseModel):
+    """Set on a signal that came from a customer's channel self-test post (a PS-XXXXXX code).
+    The risk engine then looks only at that customer's rule, records what it would copy and
+    places nothing unless `place` is true."""
+    test_id: str
+    user_id: str
+    place: bool = False
+
+
 class ParsedSignal(BaseModel):
     signal_id: str = Field(default_factory=lambda: new_id("sig"))
     channel_id: str
@@ -104,6 +113,7 @@ class ParsedSignal(BaseModel):
     parser_profile: str | None = None
     template: str | None = None
     raw_text: str
+    test: SelfTest | None = None
 
 
 class SignalRejected(BaseModel):

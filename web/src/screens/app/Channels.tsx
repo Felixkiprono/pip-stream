@@ -3,6 +3,7 @@ import { ChevronRight, Plus, Zap } from 'lucide-react'
 import { useState } from 'react'
 import { Link } from 'react-router'
 import { Page } from '../../components/AppShell'
+import { ChannelCheck } from '../../components/ChannelCheck'
 import { Sheet } from '../../components/Install'
 import { Avatar, Badge, Button, Card, ErrorNote, Spinner, Toggle } from '../../components/ui'
 import { api, del, put } from '../../lib/api'
@@ -16,7 +17,8 @@ const MODE: Record<Rule['mode'], [string, 'brand' | 'warn' | 'up']> = {
   live: ['Live', 'up'],
 }
 
-function RuleSheet({ c, onClose }: { c: MyChannel; onClose: () => void }) {
+function RuleSheet({ c, onClose, initialTab = 'settings' }: { c: MyChannel; onClose: () => void; initialTab?: 'settings' | 'test' }) {
+  const [tab, setTab] = useState(initialTab)
   const qc = useQueryClient()
   const styles = useQuery({ queryKey: ['styles'], queryFn: () => api<{ styles: Style[] }>('styles') })
   const brokers = useQuery({ queryKey: ['brokers'], queryFn: () => api<{ brokers: Broker[] }>('brokers') })
@@ -44,6 +46,19 @@ function RuleSheet({ c, onClose }: { c: MyChannel; onClose: () => void }) {
 
   return (
     <Sheet open onClose={onClose} title={c.title}>
+      <div className="mb-3 grid grid-cols-2 gap-1 rounded-2xl bg-surface-2 p-1" role="tablist">
+        {(['settings', 'test'] as const).map((t) => (
+          <button key={t} role="tab" aria-selected={tab === t} onClick={() => setTab(t)} className={`rounded-xl py-2 text-sm font-semibold ${tab === t ? 'bg-surface shadow-card' : 'text-ink-3'}`}>
+            {t === 'settings' ? 'Copy settings' : 'Test this channel'}
+          </button>
+        ))}
+      </div>
+      {tab === 'test' ? (
+        <div className="max-h-[70dvh] overflow-y-auto pb-2">
+          <ChannelCheck c={c} />
+        </div>
+      ) : (
+      <>
       <div className="max-h-[70dvh] space-y-4 overflow-y-auto pb-2">
         <div className="flex items-center justify-between rounded-2xl bg-surface-2 p-3">
           <span className="font-semibold">Copy this channel</span>
@@ -90,6 +105,8 @@ function RuleSheet({ c, onClose }: { c: MyChannel; onClose: () => void }) {
           Save
         </Button>
       </div>
+      </>
+      )}
     </Sheet>
   )
 }
@@ -130,7 +147,10 @@ export default function Channels() {
             ))}
           </ul>
         </Card>
-      ) : (
+      ) : null}
+      {q.data?.channels.length ? (
+        <p className="px-1 text-sm text-ink-3">Want to check a channel copies properly? Tap it, then <b>Test this channel</b>.</p>
+      ) : q.isLoading ? null : (
         <p className="rounded-3xl bg-surface-2 p-6 text-center text-ink-2">You're not copying any channel yet.</p>
       )}
       {open && <RuleSheet c={open} onClose={() => setOpen(null)} />}

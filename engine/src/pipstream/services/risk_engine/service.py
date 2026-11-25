@@ -22,6 +22,7 @@ from ...common.ids import new_id
 from ...common.log import ctx
 from ...common.service import Context
 from ...common.signing import IntentSigner
+from ..parser import selftest
 from ..parser.engine import SymbolCatalog
 from .filters import check_filters, entry_passed
 from .sizing import SizingError, finalize, resolve_symbol, risk_lots, round_down, split_tps
@@ -66,6 +67,8 @@ class RiskEngine:
             self.c.log.warning("global kill switch on; signal ignored", extra=ctx(signal_id=sig.signal_id))
             return
         rules = await self.c.db.fetch(RULES_SQL, sig.channel_id)
+        if sig.test is not None:
+            return await self._self_test(sig, [dict(r) for r in rules if r["user_id"] == sig.test.user_id], ev.trace_id)
         for rule in rules:
             try:
                 intents = await self.plan(sig, dict(rule))
@@ -81,6 +84,37 @@ class RiskEngine:
                 continue
             for intent in intents:
                 await self._emit(intent, ev.trace_id)
+
+    async def _self_test(self, sig: ParsedSignal, rules: list[dict], trace_id: str) -> None:
+        """Channel self-test: what this customer's rule would do with the post. Records the plan
+        for the app; places it only when the customer asked (and never in watch-only mode)."""
+        p, t = self.p, sig.test
+        if await self.c.redis.get(f"{p}:killswitch:global") == "1":
+            await selftest.update(self.c.redis, p, t.test_id, state="planned", done=True,
+                                  plan={"status": "skipped", "limit": "global_pause", "detail": "copying is paused for everyone"})
+            return
+        if not rules:
+            await selftest.update(self.c.redis, p, t.test_id, state="planned", done=True, plan={"status": "no_rule"})
+            return
+        rule = sorted(rules, key=lambda r: r["mode"] == "shadow")[0]  # the app keeps one rule per channel
+        base = {"mode": rule["mode"], "broker_account_id": rule["broker_account_id"], "connector": rule["connector"]}
+        try:
+            intents = await self.plan(sig, rule)
+        except Skip as s:
+            await selftest.update(self.c.redis, p, t.test_id, state="planned", done=True,
+                                  plan={**base, "status": "skipped", "limit": s.limit, "detail": s.detail})
+            return
+        legs = [{"action": i.action, "symbol": i.symbol, "side": i.side, "order_type": i.order_type, "price": i.price,
+                 "ref_price": i.ref_price, "volume": i.volume, "sl": i.sl, "tp": i.tp, "tp_index": i.tp_index,
+                 "options": i.options.model_dump() if i.options else None} for i in intents]
+        place = t.place and rule["mode"] != "shadow"
+        if place:
+            for intent in intents:
+                await self._emit(intent, trace_id)
+        await selftest.update(self.c.redis, p, t.test_id, state="planned", done=True,
+                              plan={**base, "status": "placed" if place else "would_copy", "legs": legs,
+                                    "signal_id": sig.signal_id if place else None})
+        self.c.log.info("self-test planned", extra=ctx(trace_id=trace_id, rule=rule["id"], legs=len(legs), placed=place))
 
     async def _limit(self, sig, rule, s: Skip, trace_id: str) -> None:
         self.c.log.info("rule skipped", extra=ctx(trace_id=trace_id, rule=rule["id"], limit=s.limit, detail=s.detail))

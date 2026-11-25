@@ -67,6 +67,15 @@ class TelegramController extends Controller
         return $this->link->request($this->account($r), 'password', ['password' => $data['password']]);
     }
 
+    /** "Test Telegram": the engine signs in with the saved session and leaves a note in Saved Messages. */
+    public function test(Request $r)
+    {
+        $a = $r->user()->telegramAccounts()->orderByDesc('created_at')->first();
+        abort_unless($a && $a->isLinked(), 409, 'Telegram is not connected. Connect it first.');
+
+        return $this->link->request($a, 'test');
+    }
+
     public function request(Request $r, string $rid)
     {
         $s = $this->link->status($rid);

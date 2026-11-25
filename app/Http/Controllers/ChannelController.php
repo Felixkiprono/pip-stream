@@ -6,6 +6,7 @@ use App\Models\Channel;
 use App\Models\CopyRule;
 use App\Pipstream\Accounts;
 use App\Pipstream\Bus;
+use App\Pipstream\ChannelTest;
 use App\Pipstream\Presets;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -98,6 +99,80 @@ class ChannelController extends Controller
         $bus->publish('config.changed', ['entity' => 'copy_rule', 'entity_id' => $rule->id]);
 
         return ['rule' => $this->rule_out($rule->fresh())];
+    }
+
+    private function followed(Request $r, Channel $channel): void
+    {
+        abort_unless(DB::table('subscriptions')->where(['user_id' => $r->user()->id, 'channel_id' => $channel->id])->exists(), 404);
+    }
+
+    /** Start a self-test: a one-time code for the customer to post in this channel. */
+    public function startTest(Request $r, Channel $channel, ChannelTest $tests)
+    {
+        $this->followed($r, $channel);
+        $place = (bool) ($r->validate(['place' => ['sometimes', 'boolean']])['place'] ?? false);
+        abort_unless(\Illuminate\Support\Facades\RateLimiter::attempt("channel-test:{$r->user()->id}", 10, fn () => true, 600), 429,
+            'That is a lot of tests. Try again in a few minutes.');
+        $t = $tests->start($r->user(), $channel, $place);
+        \App\Models\AuditLog::record($r->user()->id, $place ? 'channel_test_place' : 'channel_test', 'channel', $channel->id);
+
+        return ['test' => $tests->present($t, $channel), 'sample' => $tests->sample()];
+    }
+
+    public function test(Request $r, Channel $channel, string $test, ChannelTest $tests)
+    {
+        $this->followed($r, $channel);
+        $t = $tests->get($r->user(), $test);
+        abort_unless($t && $t['channel_id'] === $channel->id, 404);
+
+        return ['test' => $tests->present($t, $channel)];
+    }
+
+    /** Everything that has to be right for this channel to copy, checked now, plus its latest posts. */
+    public function check(Request $r, Channel $channel)
+    {
+        $this->followed($r, $channel);
+        $u = $r->user();
+        $p = config('pipstream.stream_prefix', 'ps');
+        $redis = rescue(fn () => app(Bus::class)->redis()->client(), null, false);
+        $beat = $redis ? rescue(fn () => $redis->get("{$p}:health:intake"), null, false) : null;
+        $engine = $beat && microtime(true) - (float) $beat < 30;
+        $mine = $u->telegramAccounts()->orderByDesc('created_at')->first();
+        $reader = DB::table('channel_readers')->join('telegram_accounts', 'telegram_accounts.id', '=', 'channel_readers.telegram_account_id')
+            ->where('channel_readers.channel_id', $channel->id)->where('telegram_accounts.status', 'active')
+            ->whereNotNull('telegram_accounts.session_ciphertext')->exists();
+        $rule = $u->copyRules()->where('channel_id', $channel->id)->first();
+        $broker = $rule ? $u->brokerAccounts()->find($rule->broker_account_id) : null;
+        $billing = $u->billing()->with('plan')->first();
+        $last = DB::table('signals')->where('channel_id', $channel->id)->max('created_at');
+        $paused = (bool) $u->kill_switch;
+
+        $checks = [
+            ['id' => 'telegram', 'ok' => (bool) $mine?->isLinked(), 'label' => 'Your Telegram is connected',
+                'detail' => $mine?->isLinked() ? null : 'Connect Telegram again in Settings.'],
+            ['id' => 'reader', 'ok' => $reader, 'label' => 'PipStream is reading this channel',
+                'detail' => $reader ? null : 'No connected Telegram account is reading it. Reconnect Telegram, then follow the channel again.'],
+            ['id' => 'engine', 'ok' => $engine, 'label' => 'The copier is running',
+                'detail' => $engine ? null : 'Our signal reader is not answering right now. We have been alerted; try again shortly.'],
+            ['id' => 'copy', 'ok' => $rule && $rule->enabled && ! $paused, 'label' => 'Copying is on for this channel',
+                'detail' => ! $rule || ! $rule->enabled ? 'Turn on "Copy this channel" below.' : ($paused ? 'You paused all copying on Home.' : null)],
+            ['id' => 'broker', 'ok' => (bool) $broker?->enabled, 'label' => $broker ? 'Trades go to '.$broker->label.match ($rule->mode) { 'live' => ' (live)', 'shadow' => ' (watch only)', default => '' } : 'A broker account is chosen',
+                'detail' => $broker?->enabled ? ($rule->mode === 'shadow' ? 'Watch only: signals are recorded, no orders are placed.' : null) : 'Pick where trades go below.'],
+            ['id' => 'plan', 'ok' => (bool) $billing?->isEntitled(), 'label' => 'Your plan is active',
+                'detail' => $billing?->isEntitled() ? null : 'Renew under Plan and billing to keep copying.'],
+        ];
+        $recent = DB::table('signals')->where('channel_id', $channel->id)->orderByDesc('created_at')->limit(8)
+            ->get(['id', 'status', 'kind', 'reason', 'payload', 'created_at'])->map(function ($s) {
+                $pl = json_decode($s->payload, true) ?: [];
+
+                return ['id' => $s->id, 'status' => $s->status, 'at' => $s->created_at,
+                    'posted_at' => $pl['source']['posted_at'] ?? null, 'text' => mb_strimwidth($pl['raw_text'] ?? '', 0, 140, '…'),
+                    'read_as' => $s->status === 'parsed' ? ChannelTest::summary($pl) : 'Not a signal: '.ChannelTest::reason((string) $s->reason)];
+            });
+
+        return ['checks' => $checks, 'ok' => collect($checks)->every('ok'), 'last_post_at' => $last, 'recent' => $recent,
+            'can_place' => (bool) $broker?->enabled && $rule?->mode !== 'shadow',
+            'place_live' => $rule?->mode === 'live'];
     }
 
     /** Demo broker accounts (as the terminal itself reports) can be copied into on any plan. */

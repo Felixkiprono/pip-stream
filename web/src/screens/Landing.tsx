@@ -1,7 +1,7 @@
 import clsx from 'clsx'
 import {
   ArrowRight, BarChart3, BellRing, Brain, Check, ChevronDown, Cpu, Eye, Gauge, KeyRound, Landmark, Lock, MessageSquareText, OctagonX,
-  CheckCircle2, FlaskConical, QrCode, Radio, Reply, Scale, ShieldCheck, Smartphone, Sparkles, Zap,
+  CheckCircle2, FlaskConical, QrCode, Radio, Reply, Scale, Smartphone, Sparkles, TriangleAlert, Zap,
 } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { useEffect, useState, type ReactNode } from 'react'
@@ -38,8 +38,6 @@ export default function Landing() {
       <TryIt />
       <Safety />
       <Features />
-      <Pricing />
-      <Faq />
       <FinalCta />
       <Footer />
     </div>
@@ -81,7 +79,6 @@ function Nav() {
         <nav className="flex items-center gap-1">
           <a href="#how" className="hidden px-3 text-sm font-semibold text-ink-2 hover:text-ink md:block">How it works</a>
           <a href="#safety" className="hidden px-3 text-sm font-semibold text-ink-2 hover:text-ink md:block">Safety</a>
-          <a href="#pricing" className="hidden px-3 text-sm font-semibold text-ink-2 hover:text-ink md:block">Pricing</a>
           <ThemeButton />
           <Link to="/login" className="px-3 text-sm font-semibold text-ink-2 hover:text-ink">Sign in</Link>
           <Link to="/signup" className="hidden rounded-full bg-brand px-4 py-2 text-sm font-semibold text-brand-ink sm:block">Start free</Link>
@@ -500,18 +497,25 @@ function Safety() {
   ]
   return (
     <section id="safety" className="scroll-mt-20 px-5 py-16 md:py-24">
-      <div className="mx-auto grid max-w-6xl gap-10 rounded-[32px] bg-ink px-6 py-12 text-bg md:grid-cols-[1fr_1.4fr] md:px-12 md:py-16">
-        <div>
-          <span className="grid size-14 place-items-center rounded-2xl bg-bg/10"><ShieldCheck className="size-7" /></span>
-          <h2 className="mt-5 text-[30px] leading-tight font-bold tracking-tight md:text-[40px]">Built so your account stays yours.</h2>
-          <p className="mt-3 text-[17px] opacity-75">Copy trading touches your money and your messages. We designed every step around that.</p>
+      <div className="mx-auto max-w-6xl overflow-hidden rounded-[28px] border border-warn/40 bg-warn-soft">
+        {/* the risk warning comes first: forex is a risk-taking venture */}
+        <div className="flex flex-col gap-4 border-b border-warn/30 px-6 py-6 sm:flex-row md:px-10 md:py-8" role="note" aria-label="Risk warning">
+          <span className="grid size-12 shrink-0 place-items-center rounded-2xl bg-warn text-white"><TriangleAlert className="size-6" /></span>
+          <div>
+            <h2 className="text-[22px] leading-tight font-bold tracking-tight md:text-[28px]">Trading forex is risky. Only trade money you can afford to lose.</h2>
+            <p className="mt-2 max-w-[75ch] text-[15px] leading-relaxed text-ink-2">
+              Forex, gold and CFDs are high-risk, leveraged products: prices move fast, and you can lose some or all of the money you put in.
+              Signal channels can be wrong, and past results don’t promise future ones. PipStream is a tool that copies the signals <b>you</b> choose:
+              it is not financial advice, and we are not responsible for your trading decisions, the signals you follow, or any losses.
+              Start on practice money and go live only when you understand the risks.
+            </p>
+          </div>
         </div>
-        <div className="grid gap-6 sm:grid-cols-2">
+        <div className="grid gap-6 bg-surface/60 px-6 py-8 sm:grid-cols-2 md:px-10 lg:grid-cols-4">
           {items.map(([Icon, t, d]) => (
             <div key={t}>
-              <Icon className="size-6 opacity-90" />
-              <h3 className="mt-3 font-bold">{t}</h3>
-              <p className="mt-1 text-[15px] leading-relaxed opacity-75">{d}</p>
+              <span className="flex items-center gap-2"><Icon className="size-5 text-warn" /><h3 className="font-bold">{t}</h3></span>
+              <p className="mt-1.5 text-[14px] leading-relaxed text-ink-2">{d}</p>
             </div>
           ))}
         </div>
@@ -547,59 +551,6 @@ function Features() {
 }
 
 /* ------------------------------------------------------------------ pricing, faq, footer */
-
-function Pricing() {
-  const plans = [
-    { name: 'Free trial', price: 'Free', sub: '14 days', perks: ['Copy every channel & group', 'Free practice account', 'Live stats and trade details', 'Alerts in the app and Telegram'], cta: 'Start free' },
-    { name: 'Pro', price: 'KES 2,500', sub: 'per month', perks: ['Everything in the trial', 'Copy to your real MT5 or Deriv', 'Up to 3 broker accounts', 'Per-channel risk & daily loss limits', 'Pay with M-Pesa or card'], cta: 'Start free, upgrade later', hot: true },
-  ]
-  return (
-    <Section id="pricing" eyebrow="Pricing" title="Start free. Go live when you trust it." sub="PipStream is in beta: prices may change, and early members keep their deal.">
-      <div className="grid gap-4 md:grid-cols-2">
-        {plans.map((p) => (
-          <div key={p.name} className={clsx('relative rounded-[28px] border-2 bg-surface p-7', p.hot ? 'border-brand shadow-card' : 'border-line')}>
-            {p.hot && <span className="absolute -top-3 left-7 rounded-full bg-brand px-3 py-1 text-xs font-bold text-brand-ink">Most popular</span>}
-            <div className="flex items-baseline justify-between gap-3">
-              <h3 className="text-xl font-bold">{p.name}</h3>
-              <div className="text-right"><span className="text-3xl font-bold tracking-tight">{p.price}</span> <span className="text-sm text-ink-3">{p.sub}</span></div>
-            </div>
-            <ul className="mt-6 space-y-2.5">
-              {p.perks.map((x) => <li key={x} className="flex gap-2.5 text-[15px] text-ink-2"><Check className="mt-0.5 size-4 shrink-0 text-up" strokeWidth={3} /> {x}</li>)}
-            </ul>
-            <Link to="/signup" className={clsx('mt-7 flex min-h-12 items-center justify-center rounded-2xl font-semibold', p.hot ? 'bg-brand text-brand-ink' : 'bg-brand-soft text-brand')}>{p.cta}</Link>
-          </div>
-        ))}
-      </div>
-    </Section>
-  )
-}
-
-function Faq() {
-  const qa: [string, string][] = [
-    ['Can PipStream read my private chats?', 'No. It only reads the channels and groups you pick, and it never posts anything. You can disconnect any time, in the app or from Telegram’s Devices list.'],
-    ['Do I need to be the channel admin?', 'No. If you can see the channel or group in your Telegram, PipStream can copy it.'],
-    ['How do I know my channel will copy properly?', 'Test it. After you pick a channel, post the one-time test code we give you in it and watch PipStream read the post and show the trade it would open, on practice money. You can test again any time from Channels.'],
-    ['How fast is it?', 'Usually 100–300 ms from the post to your broker’s confirmation. Most of that is Telegram delivering the message.'],
-    ['Which brokers work?', 'Any broker on MetaTrader 5 (Exness, IC Markets, XM, HFM and more) and Deriv. Everyone also gets a free practice account.'],
-    ['What if a post is not a clear signal?', 'Nothing is traded. PipStream only acts on posts it reads with high confidence, and tells you when it skips one and why.'],
-    ['Is trading risky?', 'Yes. Signals can lose money, and past results don’t guarantee future ones. Start on practice money and only trade what you can afford to lose.'],
-  ]
-  return (
-    <Section title="Questions" className="pt-0 md:pt-0">
-      <div className="mx-auto max-w-3xl divide-y divide-line overflow-hidden rounded-[24px] border border-line bg-surface">
-        {qa.map(([q, a]) => (
-          <details key={q} className="group p-5 open:bg-surface-2/50">
-            <summary className="flex cursor-pointer list-none items-center justify-between gap-4 font-semibold">
-              {q}
-              <ChevronDown className="size-5 shrink-0 text-ink-3 transition group-open:rotate-180" />
-            </summary>
-            <p className="mt-2 text-[15px] leading-relaxed text-ink-2">{a}</p>
-          </details>
-        ))}
-      </div>
-    </Section>
-  )
-}
 
 function FinalCta() {
   return (

@@ -230,4 +230,62 @@ class EaBridgeTest extends TestCase
             json_encode(['state' => ['positions' => [], 'broker_connected' => false, 'quotes' => ['GBPJPY' => [190.1, 190.2]]]]))->assertOk();
         $this->assertFalse($this->redis()->get(config('pipstream.stream_prefix').':quote:GBPJPY'));  // frozen prices aren't used
     }
+
+    private function sync(string $key, array $body = [])
+    {
+        return $this->call('POST', '/ea/v1/sync', [], [], [], ['HTTP_X-PipStream-Key' => $key, 'CONTENT_TYPE' => 'application/json'], json_encode($body));
+    }
+
+    private function liveFlag($res): string
+    {
+        return explode('|', explode("\n", trim($res->getContent()))[0])[3] ?? '';
+    }
+
+    public function test_real_money_account_opens_nothing_until_the_customer_confirms_that_login(): void
+    {
+        [$u, $b, $key] = $this->addEa();
+        $ch = \App\Models\Channel::create(['tg_chat_id' => -100990, 'title' => 'Gold Live', 'parser_profile_id' => 'pp_default']);
+        \Illuminate\Support\Facades\DB::table('subscriptions')->insert(['user_id' => $u->id, 'channel_id' => $ch->id]);
+        \Illuminate\Support\Facades\DB::table('billing_subscriptions')->where('user_id', $u->id)->update(['plan_id' => 'pro', 'status' => 'active']);
+        $real = ['balance' => 250, 'currency' => 'USD', 'login' => '81234567', 'server' => 'Exness-MT5Real8', 'company' => 'Exness',
+            'demo' => false, 'trade_mode' => 'real', 'suffix' => 'm', 'trade_allowed' => true, 'positions' => []];
+
+        // the EA is told "no new trades" while the real account is not confirmed
+        $this->assertSame('0', $this->liveFlag($this->sync($key, ['state' => $real])->assertOk()));
+        $this->actingAs($u)->getJson("/api/v1/brokers/{$b['id']}")
+            ->assertJsonPath('broker.money.kind', 'real')->assertJsonPath('broker.money.confirmed', false)
+            ->assertJsonPath('broker.money.suffix', 'm')->assertJsonPath('broker.status.account.trade_mode', 'real');
+
+        // turning on live asks first, naming the account
+        $rule = fn (array $extra = []) => $this->putJson("/api/v1/channels/{$ch->id}/rule",
+            ['style' => 'fixed', 'fixed_lots' => 0.01, 'broker_account_id' => $b['id'], 'live' => true] + $extra);
+        $rule()->assertStatus(409)->assertJsonPath('needs_live_confirm', true)->assertJsonPath('account.login', '81234567')
+            ->assertJsonPath('account.company', 'Exness');
+        $this->assertDatabaseMissing('copy_rules', ['channel_id' => $ch->id, 'mode' => 'live']);
+        $rule(['confirm_live' => true])->assertOk()->assertJsonPath('rule.mode', 'live');
+        $this->assertDatabaseHas('audit_log', ['action' => 'live_confirm', 'entity_id' => $b['id']]);
+        // the next check-in (even one without state) lets the EA open trades
+        $this->assertSame('1', $this->liveFlag($this->sync($key)->assertOk()));
+        $rule()->assertOk();  // no second question for the same login
+
+        // MetaTrader logs into another real account: blocked again until confirmed
+        $this->assertSame('0', $this->liveFlag($this->sync($key, ['state' => ['login' => '89999999'] + $real])));
+        $this->actingAs($u)->getJson("/api/v1/brokers/{$b['id']}")->assertJsonPath('broker.money.needs_confirm', true);
+        $this->postJson("/api/v1/brokers/{$b['id']}/live-confirm")->assertOk()->assertJsonPath('broker.money.confirmed', true);
+        $this->assertSame('1', $this->liveFlag($this->sync($key)));
+
+        // demo accounts never need it
+        $this->assertSame('1', $this->liveFlag($this->sync($key, ['state' => ['demo' => true, 'login' => '1'] + $real])));
+        $this->postJson("/api/v1/brokers/{$b['id']}/live-confirm")->assertStatus(422);
+    }
+
+    public function test_live_needs_a_terminal_that_has_said_whether_it_is_demo(): void
+    {
+        [$u, $b] = $this->addEa();
+        $ch = \App\Models\Channel::create(['tg_chat_id' => -100991, 'title' => 'Gold', 'parser_profile_id' => 'pp_default']);
+        \Illuminate\Support\Facades\DB::table('subscriptions')->insert(['user_id' => $u->id, 'channel_id' => $ch->id]);
+        \Illuminate\Support\Facades\DB::table('billing_subscriptions')->where('user_id', $u->id)->update(['plan_id' => 'pro', 'status' => 'active']);
+        $this->actingAs($u)->putJson("/api/v1/channels/{$ch->id}/rule", ['style' => 'balanced', 'broker_account_id' => $b['id'], 'live' => true, 'confirm_live' => true])
+            ->assertStatus(422);
+    }
 }

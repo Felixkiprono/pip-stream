@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\AuditLog;
 use App\Models\BrokerAccount;
 use App\Pipstream\Bus;
+use App\Pipstream\LiveGate;
 use App\Pipstream\Vault;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -34,7 +35,39 @@ class BrokerController extends Controller
         return ['id' => $b->id, 'connector' => $b->connector, 'label' => $b->label, 'enabled' => $b->enabled,
             'connected' => $b->connector === 'paper' || ($status ? $status['state'] === 'connected' : $b->hasCredentials()),
             'status' => $status, 'platform' => $b->symbol_map['_platform'] ?? null,
-            'login_hint' => $b->symbol_map['_login_hint'] ?? null];
+            'login_hint' => $b->symbol_map['_login_hint'] ?? null, 'money' => $this->money($b)];
+    }
+
+    /**
+     * Demo or real money, as the terminal reports it, and whether live copying is confirmed for
+     * the login it is on now. needs_confirm: a channel copies here live but the EA refuses new
+     * trades until the customer says yes for this account.
+     */
+    private function money(BrokerAccount $b): ?array
+    {
+        if ($b->connector !== 'ea_bridge') {
+            return null;
+        }
+        $state = LiveGate::state($b);
+        $kind = LiveGate::kind($state);
+        $confirmed = $kind === 'real' && LiveGate::confirmedFor($b, $state);
+        $live = $kind === 'real' && ! $confirmed
+            && \App\Models\CopyRule::where('broker_account_id', $b->id)->where('mode', 'live')->where('enabled', true)->exists();
+
+        return ['kind' => $kind, 'confirmed' => $confirmed, 'needs_confirm' => $live,
+            'suffix' => is_array($state) && ($state['suffix'] ?? '') !== '' ? (string) $state['suffix'] : null];
+    }
+
+    /** "Yes, copy into this real-money account": recorded for the login the terminal is on now. */
+    public function confirmLive(Request $r, BrokerAccount $broker)
+    {
+        abort_unless($broker->user_id === $r->user()->id && $broker->connector === 'ea_bridge' && $broker->enabled, 404);
+        $state = LiveGate::state($broker);
+        abort_unless(LiveGate::kind($state) === 'real', 422,
+            'PipStream can only confirm a real-money account while MetaTrader is open with PipStream connected.');
+        LiveGate::confirm($broker, $state, $r->user()->id);
+
+        return ['broker' => $this->present($broker->fresh())];
     }
 
     /** The EA checks in about once a second; its last check-in and account state live in redis. */
@@ -50,7 +83,7 @@ class BrokerController extends Controller
         $acct = $st ? array_filter(['balance' => $st['balance'] ?? null, 'equity' => $st['equity'] ?? null,
             'currency' => $st['currency'] ?? null, 'login' => $st['login'] ?? null, 'server' => $st['server'] ?? null,
             'company' => $st['company'] ?? null, 'demo' => isset($st['demo']) ? (bool) $st['demo'] : null,
-            'platform' => $st['platform'] ?? null, 'ea_version' => $st['ea_version'] ?? null, 'positions' => count($st['positions'] ?? [])], fn ($v) => $v !== null) : null;
+            'platform' => $st['platform'] ?? null, 'ea_version' => $st['ea_version'] ?? null, 'trade_mode' => $st['trade_mode'] ?? null, 'positions' => count($st['positions'] ?? [])], fn ($v) => $v !== null) : null;
         if ($age > 15) {
             return ['state' => 'error', 'detail' => 'Your MetaTrader terminal is offline (last seen '.now()->subSeconds($age)->diffForHumans().')', 'account' => $acct, 'seen_s' => $age];
         }

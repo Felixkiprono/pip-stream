@@ -55,7 +55,11 @@ export default function Brokers() {
                   )}
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="block font-semibold">{b.label}</span>
+                  <span className="flex flex-wrap items-center gap-1.5 font-semibold">
+                    {b.label}
+                    {b.money?.kind === 'real' && <Badge tone="warn">Real money</Badge>}
+                    {b.money?.kind === 'demo' && <Badge tone="brand">Demo</Badge>}
+                  </span>
                   <span className="block text-sm text-ink-3">{subline(b)}</span>
                   {b.status && <StatusLine s={b.status} />}
                 </span>
@@ -84,6 +88,7 @@ export default function Brokers() {
                     </button>
                   </span>
                 )}
+                {b.money?.needs_confirm && <LiveConfirm broker={b} onDone={refresh} />}
                 {testing === b.id && (
                   <div className="w-full space-y-3 pl-13">
                     <BrokerTest broker={b} auto={justPaired === b.id} />
@@ -241,7 +246,8 @@ function subline(b: Broker) {
   if (b.connector === 'paper') return '$10,000 practice money'
   if (b.connector === 'ea_bridge') {
     const a = b.status?.account
-    return a?.login ? `${a.company ? a.company + ' · ' : ''}${a.login} · ${a.balance?.toLocaleString()} ${a.currency ?? ''}` : 'Runs in your MetaTrader'
+    const sfx = b.money?.suffix ? ` · symbols like XAUUSD${b.money.suffix}` : ''
+    return a?.login ? `${a.company ? a.company + ' · ' : ''}${a.login} · ${a.balance?.toLocaleString()} ${a.currency ?? ''}${sfx}` : 'Runs in your MetaTrader'
   }
   return `Login ${b.login_hint ?? ''}`
 }
@@ -293,6 +299,39 @@ function EaAddForm({ onCreated, onCancel }: { onCreated: (b: Broker, key: string
           Get my key and the EA
         </Button>
       </div>
+    </div>
+  )
+}
+
+/** A channel copies here live, but this real-money login was never confirmed: the EA opens nothing until it is. */
+function LiveConfirm({ broker, onDone }: { broker: Broker; onDone: () => void }) {
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+  const a = broker.status?.account
+  async function confirm() {
+    const who = [a?.company, a?.login && `account ${a.login}`].filter(Boolean).join(' ')
+    if (!window.confirm(`Copy signals into ${who || broker.label} with real money?\n\nEvery copied signal opens a real order. Losses are real. Continue?`)) return
+    setBusy(true)
+    setErr('')
+    try {
+      await post(`brokers/${broker.id}/live-confirm`)
+      onDone()
+    } catch (e) {
+      setErr((e as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <div className="w-full space-y-2 rounded-2xl bg-warn-soft p-3 text-sm text-warn">
+      <p className="flex items-start gap-2 font-semibold">
+        <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+        This is a real-money account{a?.login ? ` (${a.login})` : ''}. A channel copies here live, but PipStream opens no new trades in it until you confirm.
+      </p>
+      <Button busy={busy} onClick={confirm}>
+        Confirm real-money copying
+      </Button>
+      {err && <ErrorNote>{err}</ErrorNote>}
     </div>
   )
 }

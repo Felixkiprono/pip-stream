@@ -4,7 +4,8 @@ import { Check } from 'lucide-react'
 import { useState } from 'react'
 import { useNavigate } from 'react-router'
 import { Button, ErrorNote, Field, Spinner, Step } from '../../components/ui'
-import { api, put } from '../../lib/api'
+import { api } from '../../lib/api'
+import { saveRule } from '../../lib/rules'
 import { useSession } from '../../lib/session'
 import type { MyChannel, Rule, Style as StyleT } from '../../lib/types'
 
@@ -58,7 +59,7 @@ export default function Style() {
     setErr('')
     try {
       for (const c of chans.data?.channels ?? []) {
-        await put(`channels/${c.id}/rule`, { style, fixed_lots: style === 'fixed' ? Number(lots) : undefined, broker_account_id: c.rule?.broker_account_id })
+        await saveRule(c.id, { style, fixed_lots: style === 'fixed' ? Number(lots) : undefined, broker_account_id: c.rule?.broker_account_id })
       }
       await refresh()
       qc.invalidateQueries({ queryKey: ['channels'] })

@@ -75,6 +75,7 @@ Route::middleware(['auth', 'active'])->group(function () {
     Route::post('brokers/{broker}/test', [BrokerController::class, 'test']);
     Route::get('brokers/{broker}/test/{test}', [BrokerController::class, 'testResult']);
     Route::post('brokers/{broker}/ea-key', [BrokerController::class, 'eaKey']);
+    Route::post('brokers/{broker}/live-confirm', [BrokerController::class, 'confirmLive']);
     Route::delete('brokers/{broker}', [BrokerController::class, 'destroy']);
 
     // ------------------------------------------------------------ billing + settings

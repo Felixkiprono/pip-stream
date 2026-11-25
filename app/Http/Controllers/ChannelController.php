@@ -7,6 +7,7 @@ use App\Models\CopyRule;
 use App\Pipstream\Accounts;
 use App\Pipstream\Bus;
 use App\Pipstream\ChannelTest;
+use App\Pipstream\LiveGate;
 use App\Pipstream\Presets;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -74,6 +75,7 @@ class ChannelController extends Controller
             'enabled' => ['boolean'],
             'broker_account_id' => ['nullable', 'string'],
             'live' => ['boolean'],
+            'confirm_live' => ['boolean'],
             'fixed_lots' => ['nullable', 'numeric', 'min:0.01', 'max:100'],
             'max_lot' => ['nullable', 'numeric', 'min:0.01', 'max:100'],
             'max_daily_loss' => ['nullable', 'numeric', 'min:0'],
@@ -88,9 +90,13 @@ class ChannelController extends Controller
             ? (bool) $data['live']
             : $rule->exists && $rule->mode === 'live' && $rule->broker_account_id === $broker->id;
         $live = $wantLive && $broker->connector !== 'paper';
+        $already = $rule->exists && $rule->mode === 'live' && $rule->broker_account_id === $broker->id;
         if ($live && ! $this->isDemo($broker)) {
             $billing = $u->billing()->with('plan')->first();   // fresh: never trust a cached plan for live money
             abort_unless($billing?->plan?->allow_live && $billing->isEntitled(), 402, 'Copying into a real-money account needs the Pro plan.');
+        }
+        if ($live) {
+            $this->confirmLive($r, $broker, $already, (bool) ($data['confirm_live'] ?? false));
         }
         $rule->fill(Presets::apply($data['style'], $data) + [
             'broker_account_id' => $broker->id, 'enabled' => $data['enabled'] ?? true,
@@ -178,13 +184,43 @@ class ChannelController extends Controller
     /** Demo broker accounts (as the terminal itself reports) can be copied into on any plan. */
     private function isDemo(\App\Models\BrokerAccount $b): bool
     {
-        if ($b->connector !== 'ea_bridge') {
-            return false;
-        }
-        $p = config('pipstream.stream_prefix', 'ps');
-        $raw = rescue(fn () => app(\App\Pipstream\Bus::class)->redis()->client()->get("{$p}:eares:{$b->id}:state"), null, false);
-        $state = is_string($raw) ? json_decode($raw, true) : null;
+        return LiveGate::kind(LiveGate::state($b)) === 'demo';
+    }
 
-        return is_array($state) && ($state['demo'] ?? false) === true;
+    /**
+     * Real money needs an explicit yes. Without confirm_live the answer is 409 with the account
+     * details, so the app can ask "Copy into real account 123 at Exness?" and send it again.
+     * MetaTrader (EA): confirmed per login, so a terminal that switches to another real account
+     * stops opening trades until confirmed again. Other brokers: confirmed when a channel goes live.
+     */
+    private function confirmLive(Request $r, \App\Models\BrokerAccount $broker, bool $already, bool $confirmed): void
+    {
+        $ask = fn (string $msg, array $account) => abort(response()->json(
+            ['message' => $msg, 'needs_live_confirm' => true, 'account' => $account], 409));
+        if ($broker->connector !== 'ea_bridge') {
+            if (! $already && ! $confirmed) {
+                $ask("Copy into {$broker->label} with real money? Every signal becomes a real order.", LiveGate::describe($broker, null));
+            }
+
+            return;
+        }
+        $state = LiveGate::state($broker);
+        $kind = LiveGate::kind($state);
+        if ($kind === 'demo' || LiveGate::confirmedFor($broker, $state)) {
+            return;
+        }
+        if ($kind === 'unknown') {
+            // keep an existing live rule (say a style change while MetaTrader is closed): the EA
+            // still refuses real-money trades until this login is confirmed
+            abort_unless($already, 422, 'PipStream can\'t see this MetaTrader right now, so it can\'t tell a demo from a real-money account. '
+                .'Open MetaTrader with PipStream on a chart, wait for "Connected", then turn on live.');
+
+            return;
+        }
+        if (! $confirmed) {
+            $who = trim(($state['company'] ?? '').' '.($state['login'] ?? ''));
+            $ask("This is a real-money account ({$who}). Copy signals into it with real money?", LiveGate::describe($broker, $state));
+        }
+        LiveGate::confirm($broker, $state, $r->user()->id);
     }
 }

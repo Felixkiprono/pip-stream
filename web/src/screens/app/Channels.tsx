@@ -6,7 +6,8 @@ import { Page } from '../../components/AppShell'
 import { ChannelCheck } from '../../components/ChannelCheck'
 import { Sheet } from '../../components/Install'
 import { Avatar, Badge, Button, Card, ErrorNote, Spinner, Toggle } from '../../components/ui'
-import { api, del, put } from '../../lib/api'
+import { api, del } from '../../lib/api'
+import { saveRule } from '../../lib/rules'
 import { ago } from '../../lib/format'
 import type { Broker, MyChannel, Rule, Style } from '../../lib/types'
 import { StylePicker } from '../onboarding/Style'
@@ -28,15 +29,17 @@ function RuleSheet({ c, onClose, initialTab = 'settings' }: { c: MyChannel; onCl
   const [enabled, setEnabled] = useState(c.rule?.enabled ?? true)
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
-  const isPaper = brokers.data?.brokers.find((b) => b.id === broker)?.connector === 'paper'
+  const selected = brokers.data?.brokers.find((b) => b.id === broker)
+  const isPaper = selected?.connector === 'paper'
 
   async function save() {
     setBusy(true)
     setErr('')
     try {
-      await put(`channels/${c.id}/rule`, { style: style === 'custom' ? 'balanced' : style, broker_account_id: broker || undefined, live: live && !isPaper, enabled })
+      const saved = await saveRule(c.id, { style: style === 'custom' ? 'balanced' : style, broker_account_id: broker || undefined, live: live && !isPaper, enabled })
       qc.invalidateQueries({ queryKey: ['channels'] })
-      onClose()
+      qc.invalidateQueries({ queryKey: ['brokers'] })
+      if (saved) onClose()
     } catch (e) {
       setErr((e as Error).message)
     } finally {
@@ -70,6 +73,8 @@ function RuleSheet({ c, onClose, initialTab = 'settings' }: { c: MyChannel; onCl
             {brokers.data?.brokers.map((b) => (
               <button key={b.id} onClick={() => setBroker(b.id)} className={`rounded-full border-2 px-4 py-2 text-sm font-semibold ${broker === b.id ? 'border-brand bg-brand-soft text-brand' : 'border-line'}`}>
                 {b.label}
+                {b.money?.kind === 'real' && <span className="ml-1.5 text-xs text-warn">Real money</span>}
+                {b.money?.kind === 'demo' && <span className="ml-1.5 text-xs text-ink-3">Demo</span>}
               </button>
             ))}
             <Link to="/app/brokers" className="rounded-full border-2 border-dashed border-line px-4 py-2 text-sm font-semibold text-ink-3">
@@ -80,7 +85,9 @@ function RuleSheet({ c, onClose, initialTab = 'settings' }: { c: MyChannel; onCl
         {!isPaper && broker && (
           <div className="flex items-center gap-3 rounded-2xl bg-warn-soft p-3 text-warn">
             <Zap className="size-5 shrink-0" />
-            <span className="flex-1 text-sm font-semibold">Live trading: real orders with real money</span>
+            <span className="flex-1 text-sm font-semibold">
+              {selected?.money?.kind === 'demo' ? 'Copy into this demo account (demo money only)' : 'Live trading: real orders with real money'}
+            </span>
             <Toggle on={live} onChange={setLive} label="Live trading" />
           </div>
         )}

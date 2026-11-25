@@ -7,6 +7,7 @@ use App\Models\User;
 use App\Notifications\Connected;
 use App\Pipstream\Accounts;
 use App\Pipstream\Bus;
+use App\Pipstream\LiveGate;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Cache;
@@ -21,7 +22,7 @@ use Illuminate\Support\Str;
  *                  specs?: {SYMBOL: {point, tick_size, tick_value, contract_size, volume_min, volume_max, volume_step}}}
  *
  * Response (text/plain, easy to read in MQL): one header line, then one line per command
- *   OK|<poll_ms>|<server unix time>
+ *   OK|<poll_ms>|<server unix time>|<1 if new trades may be opened on a real-money account, else 0>
  *   C|<id>|<action>|<symbol>|<side>|<order_type>|<volume>|<price>|<sl>|<tp>|<ticket>|<comment>
  *
  * Commands are written only by the engine's executor (Redis ACL): this controller can read them
@@ -270,12 +271,16 @@ class EaController extends Controller
             $state['at'] = $now;
             $state['positions'] = array_slice((array) ($state['positions'] ?? []), 0, 300);
             $redis->set($this->k($b->id, 'state'), json_encode($state), ['ex' => 86400]);
+        } else {
+            $raw = $redis->get($this->k($b->id, 'state'));
+            $state = is_string($raw) ? json_decode($raw, true) : null;
         }
         if (is_array($specs = $r->input('specs')) && $specs) {
             $redis->set($this->k($b->id, 'specs'), json_encode(array_slice($specs, 0, 400, true)), ['ex' => 86400]);
         }
 
-        $lines = ['OK|1000|'.$now];
+        // the EA refuses new trades on a real-money login the customer has not confirmed
+        $lines = ['OK|1000|'.$now.'|'.(LiveGate::allowsOpening($b, is_array($state) ? $state : null) ? '1' : '0')];
         $stream = config('pipstream.stream_prefix').":acct:{$b->id}:ea:cmd";
         $entries = $redis->xRevRange($stream, '+', '-', 30) ?: [];
         $nowMs = (int) floor(microtime(true) * 1000);

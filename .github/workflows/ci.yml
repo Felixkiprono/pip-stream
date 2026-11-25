@@ -28,4 +28,5 @@ jobs:
       - run: pytest -q engine/tests
         env:
           PS_TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
+      - run: pytest -q tests/installers   # the Mac installer run against fake Macs, the Windows one checked
       - run: docker build -t pipstream-engine:ci engine && docker build -f docker/php/Dockerfile -t pipstream-php:ci .

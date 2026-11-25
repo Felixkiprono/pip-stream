@@ -1,7 +1,8 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowRightLeft, X } from 'lucide-react'
 import { useState } from 'react'
-import { api, put } from '../lib/api'
+import { api } from '../lib/api'
+import { saveRule } from '../lib/rules'
 import type { Broker, MyChannel } from '../lib/types'
 import { Button, ErrorNote } from './ui'
 
@@ -19,14 +20,20 @@ export function RouteChannels({ broker, onDone }: { broker: Broker; onDone: () =
     setBusy(true)
     setErr('')
     try {
+      // one question for the account, not one per channel
+      let yes: boolean | null = null
+      const ask = (q: string) => (yes ??= window.confirm(q))
       for (const c of elsewhere) {
-        await put(`channels/${c.id}/rule`, {
+        const saved = await saveRule(c.id, {
           style: c.rule?.style === 'custom' || !c.rule ? 'balanced' : c.rule.style,
           broker_account_id: broker.id,
           live: true,
           enabled: true,
-        })
+        }, ask)
+        if (!saved) break
       }
+      qc.invalidateQueries({ queryKey: ['brokers'] })
+      if (yes === false) return
       qc.invalidateQueries({ queryKey: ['channels'] })
       onDone()
     } catch (e) {

@@ -12,7 +12,7 @@
 //+------------------------------------------------------------------+
 #property copyright "PipStream"
 #property link      "https://pips.stream"
-#property version   "1.12"
+#property version   "1.13"
 #property description "Places, updates and closes the trades from the Telegram channels you copy in PipStream."
 #property strict
 
@@ -22,7 +22,7 @@ input string PipStreamUrl = PS_DEFAULT_URL;  // Server (add it under Tools > Opt
 input int    SlippagePoints = 30;                  // Max slippage for market orders, in points
 
 #define PS_MAGIC 770077
-#define PS_VERSION "1.12"
+#define PS_VERSION "1.13"
 #define PS_KEY_FILE "PipStream.key"
 #define PS_CODE_LABEL "PipStreamPairCode"
 
@@ -38,6 +38,11 @@ string   g_pair_token = "";
 string   g_pair_code = "";
 string   g_url = "";            // PipStreamUrl, or the address the installer left in PipStream.url
 string   g_install = "";        // one-time token the installer left in PipStream.pair
+bool     g_live_ok = false;     // PipStream confirmed real-money copying for this account login
+string   g_suffix = "";         // what this broker adds to symbol names (Exness: XAUUSDm -> "m")
+// Common symbols put in Market Watch under the broker's own name, so PipStream gets their specs
+string   PS_COMMON[] = {"EURUSD", "GBPUSD", "USDJPY", "USDCHF", "AUDUSD", "NZDUSD", "USDCAD", "EURJPY",
+                       "GBPJPY", "EURGBP", "XAUUSD", "XAGUSD", "US30", "NAS100", "BTCUSD"};
 
 //+------------------------------------------------------------------+
 int OnInit()
@@ -61,6 +66,7 @@ int OnInit()
       Alert("PipStream: that key doesn't look right. Leave PipStreamKey empty to pair with a code instead.");
       return(INIT_PARAMETERS_INCORRECT);
    }
+   DetectSymbols();
    EventSetMillisecondTimer(g_poll_ms);
    if(g_key == "")
       Pair();
@@ -190,6 +196,57 @@ int FindTicket(const int ticket)
 }
 
 //+------------------------------------------------------------------+
+//| broker symbol names and real-money safety                        |
+//+------------------------------------------------------------------+
+// The broker's name for a plain symbol: exact (any case), else the shortest variant that starts
+// with it and adds at most 4 characters (XAUUSD -> XAUUSDm, EURUSD.r, EURUSD-ECN). "" if none.
+string BrokerSymbol(const string want)
+{
+   string w = want;
+   StringToUpper(w);
+   if(w == "")
+      return("");
+   string best = "";
+   int n = SymbolsTotal(false);
+   for(int i = 0; i < n; i++)
+   {
+      string s = SymbolName(i, false);
+      string u = s;
+      StringToUpper(u);
+      if(u == w)
+         return(s);
+      if(StringLen(u) > StringLen(w) && StringLen(u) <= StringLen(w) + 4 && StringFind(u, w) == 0)
+         if(best == "" || StringLen(s) < StringLen(best) || (StringLen(s) == StringLen(best) && s < best))
+            best = s;
+   }
+   return(best);
+}
+
+void DetectSymbols()
+{
+   for(int i = 0; i < ArraySize(PS_COMMON); i++)
+   {
+      string s = BrokerSymbol(PS_COMMON[i]);
+      if(s == "")
+         continue;
+      SymbolSelect(s, true);
+      if(g_suffix == "" && StringLen(s) > StringLen(PS_COMMON[i]))
+         g_suffix = StringSubstr(s, StringLen(PS_COMMON[i]));
+   }
+}
+
+// MT4 knows demo or not; anything that is not a demo is treated as real money.
+bool IsReal()
+{
+   return(!IsDemo());
+}
+
+string TradeMode()
+{
+   return(IsDemo() ? "demo" : "real");
+}
+
+//+------------------------------------------------------------------+
 //| account state and symbol specs                                   |
 //+------------------------------------------------------------------+
 // Live bid/ask for the Market Watch, so practice accounts can fill "buy now" signals at a real price.
@@ -222,7 +279,9 @@ string StateJson()
               ",\"login\":\"" + IntegerToString(AccountNumber()) + "\"" +
               ",\"server\":\"" + Esc(AccountServer()) + "\"" +
               ",\"company\":\"" + Esc(AccountCompany()) + "\"" +
-              ",\"demo\":" + (IsDemo() ? "true" : "false") +
+              ",\"demo\":" + (IsReal() ? "false" : "true") +
+              ",\"trade_mode\":\"" + TradeMode() + "\"" +
+              ",\"suffix\":\"" + Esc(g_suffix) + "\"" +
               ",\"trade_allowed\":" + (allowed ? "true" : "false") +
               ",\"broker_connected\":" + (TerminalInfoInteger(TERMINAL_CONNECTED) != 0 ? "true" : "false") +
               ",\"positions\":[";
@@ -284,7 +343,10 @@ void Sync(const bool force_state)
    if(send_state)
       body += ",\"state\":" + StateJson();
    if(send_specs)
+   {
+      DetectSymbols();
       body += ",\"specs\":" + SpecsJson();
+   }
    body += "}";
 
    char   data[];
@@ -342,6 +404,12 @@ void Sync(const bool force_state)
    string lines[];
    int n = StringSplit(text, '\n', lines);
    bool ran = false;
+   if(n > 0)
+   {
+      // OK|<poll_ms>|<server time>|<1 if real-money orders are confirmed for this login>
+      string h[];
+      g_live_ok = (StringSplit(lines[0], '|', h) >= 4 && h[0] == "OK" && StringFind(h[3], "1") == 0);
+   }
    for(int i = 0; i < n; i++)
    {
       if(StringFind(lines[i], "C|") != 0)
@@ -484,6 +552,15 @@ void Show()
       s += "\nMetaTrader isn't connected to your broker: File > Login to Trade Account";
    if(!allowed)
       s += "\nAutoTrading is OFF: turn it on in the toolbar so trades can be placed";
+   if(g_key != "" && g_last_ok > 0)
+   {
+      if(!IsReal())
+         s += "\nDemo account: no real money is used";
+      else if(g_live_ok)
+         s += "\nREAL-MONEY account: live copying is confirmed in PipStream";
+      else
+         s += "\nREAL-MONEY account: PipStream opens no trades here until you confirm live copying in the app";
+   }
    if(g_last_ok > 0)
       s += "\nLast check-in " + TimeToString(g_last_ok, TIME_SECONDS);
    bool pairing = (g_pair_code != "" && StringFind(g_status, "Enter this code") == 0);
@@ -517,6 +594,14 @@ void Execute(const string line)
 
    if(action == "open")
    {
+      if(IsReal() && !g_live_ok)
+      {
+         AddResult(id, false, 0, 0, 0, 0, "real-money account: confirm live copying for this account in PipStream first");
+         return;
+      }
+      string mine = BrokerSymbol(symbol);   // the engine maps names, this catches a symbol it did not know
+      if(mine != "")
+         symbol = mine;
       if(!SymbolSelect(symbol, true) || MarketInfo(symbol, MODE_POINT) <= 0)
       {
          AddResult(id, false, 0, 0, 0, 4106, "symbol " + symbol + " not available on this account");

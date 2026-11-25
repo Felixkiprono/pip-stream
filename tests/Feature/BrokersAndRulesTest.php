@@ -82,7 +82,13 @@ class BrokersAndRulesTest extends TestCase
         $this->putJson("/api/v1/channels/{$ch->id}/rule", ['style' => 'balanced', 'broker_account_id' => $broker])
             ->assertOk()->assertJsonPath('rule.mode', 'shadow');   // real broker, not live yet: watch-only
         DB::table('billing_subscriptions')->where('user_id', $u->id)->update(['plan_id' => 'pro', 'status' => 'active']);
+        // real money needs an explicit yes
         $this->putJson("/api/v1/channels/{$ch->id}/rule", ['style' => 'balanced', 'broker_account_id' => $broker, 'live' => true])
+            ->assertStatus(409)->assertJsonPath('needs_live_confirm', true);
+        $this->putJson("/api/v1/channels/{$ch->id}/rule", ['style' => 'balanced', 'broker_account_id' => $broker, 'live' => true, 'confirm_live' => true])
+            ->assertOk()->assertJsonPath('rule.mode', 'live');
+        // once live, changing the style does not ask again
+        $this->putJson("/api/v1/channels/{$ch->id}/rule", ['style' => 'careful', 'broker_account_id' => $broker, 'live' => true])
             ->assertOk()->assertJsonPath('rule.mode', 'live');
     }
 

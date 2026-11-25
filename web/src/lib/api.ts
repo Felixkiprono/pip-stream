@@ -4,10 +4,12 @@
 export class ApiError extends Error {
   status: number
   errors: Record<string, string[]>
-  constructor(status: number, message: string, errors: Record<string, string[]> = {}) {
+  data: any
+  constructor(status: number, message: string, errors: Record<string, string[]> = {}, data: any = null) {
     super(message)
     this.status = status
     this.errors = errors
+    this.data = data
   }
   field(name: string): string | undefined {
     return this.errors[name]?.[0]
@@ -43,7 +45,7 @@ export async function api<T = any>(path: string, opts: { method?: string; body?:
   const data = res.headers.get('content-type')?.includes('json') ? await res.json() : null
   if (!res.ok) {
     const msg = data?.message || (res.status === 419 ? 'Your session expired. Refresh and try again.' : 'Something went wrong. Try again.')
-    throw new ApiError(res.status, msg, data?.errors ?? {})
+    throw new ApiError(res.status, msg, data?.errors ?? {}, data)
   }
   return data as T
 }

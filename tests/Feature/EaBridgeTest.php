@@ -170,7 +170,7 @@ class EaBridgeTest extends TestCase
         $u = $this->customer();
         $res = $this->actingAs($u)->postJson('http://127.0.0.1:8000/api/v1/brokers/installer', ['platform' => 'mt5'])->assertOk();
         $this->assertMatchesRegularExpression('#^curl -fsSL http://127\.0\.0\.1:8000/ea/install/pst_[A-Za-z0-9]{40}\.sh \| bash$#', $res->json('mac'));
-        $this->assertMatchesRegularExpression('#^irm http://127\.0\.0\.1:8000/ea/install/pst_[A-Za-z0-9]{40}\.ps1 \| iex$#', $res->json('windows'));
+        $this->assertMatchesRegularExpression('#^\[Net\.ServicePointManager\]::SecurityProtocol = \[Net\.ServicePointManager\]::SecurityProtocol -bor 3072; irm http://127\.0\.0\.1:8000/ea/install/pst_[A-Za-z0-9]{40}\.ps1 \| iex$#', $res->json('windows'));
         $id = $res->json('broker.id');
         preg_match('#(pst_[A-Za-z0-9]{40})#', $res->json('mac'), $m);
         $token = $m[1];

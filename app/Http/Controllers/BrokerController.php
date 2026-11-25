@@ -164,7 +164,8 @@ class BrokerController extends Controller
 
         return ['broker' => $this->present($b),
             'mac' => "curl -fsSL {$base}.sh | bash",
-            'windows' => "irm {$base}.ps1 | iex"];
+            // TLS 1.2 first, so irm itself works on Windows PowerShell 5.1 (adds to what is allowed, never removes)
+            'windows' => "[Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor 3072; irm {$base}.ps1 | iex"];
     }
 
     /** Live help while pairing: the address the EA must reach, and whether a MetaTrader from here already reached it. */

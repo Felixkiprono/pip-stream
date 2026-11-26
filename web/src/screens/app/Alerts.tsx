@@ -1,10 +1,10 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
 import clsx from 'clsx'
-import { ChevronRight, CircleAlert, CircleCheck, CircleSlash, Copy, Info, Plug, PlugZap } from 'lucide-react'
-import { Link } from 'react-router'
+import { ChevronLeft, ChevronRight, CircleAlert, CircleCheck, CircleSlash, Copy, Info, Plug, PlugZap } from 'lucide-react'
+import { Link, useSearchParams } from 'react-router'
 import { useEffect } from 'react'
 import { Page } from '../../components/AppShell'
-import { Card, Spinner } from '../../components/ui'
+import { Button, Card, Spinner } from '../../components/ui'
 import { api, post } from '../../lib/api'
 import { ago } from '../../lib/format'
 import type { Alert } from '../../lib/types'
@@ -23,10 +23,22 @@ const ICON: Record<string, [any, string]> = {
 
 export default function Alerts() {
   const qc = useQueryClient()
-  const q = useQuery({ queryKey: ['alerts'], queryFn: () => api<{ alerts: Alert[] }>('alerts') })
+  // the page lives in the address (?page=2), so coming back from an alert's details lands on the same page
+  const [params, setParams] = useSearchParams()
+  const page = Math.max(1, Number(params.get('page')) || 1)
+  const q = useQuery({
+    queryKey: ['alerts', page],
+    queryFn: () => api<{ alerts: Alert[]; page: number; pages: number; total: number; unread: number }>(`alerts?page=${page}`),
+    placeholderData: keepPreviousData,
+  })
   useEffect(() => {
-    if (q.data?.alerts.some((a) => !a.read)) post('alerts/read').then(() => qc.invalidateQueries({ queryKey: ['home'] }))
+    if (q.data?.unread) post('alerts/read').then(() => qc.invalidateQueries({ queryKey: ['home'] }))
   }, [q.data, qc])
+  const go = (p: number) => {
+    setParams(p > 1 ? { page: String(p) } : {})
+    window.scrollTo({ top: 0 })
+  }
+  const pages = q.data?.pages ?? 1
   return (
     <Page title="Alerts">
       {q.isLoading ? (
@@ -55,6 +67,17 @@ export default function Alerts() {
               )
             })}
           </ul>
+          {pages > 1 && (
+            <nav aria-label="Alert pages" className="flex items-center justify-between gap-2 border-t border-line py-3">
+              <Button variant="soft" disabled={page <= 1 || q.isFetching} onClick={() => go(page - 1)}>
+                <ChevronLeft className="size-4" /> Newer
+              </Button>
+              <span className="text-sm text-ink-3 tabular">Page {q.data?.page ?? page} of {pages}</span>
+              <Button variant="soft" disabled={page >= pages || q.isFetching} onClick={() => go(page + 1)}>
+                Older <ChevronRight className="size-4" />
+              </Button>
+            </nav>
+          )}
         </Card>
       ) : (
         <p className="rounded-3xl bg-surface-2 p-6 text-center text-ink-2">Every copied trade, close and skipped signal shows up here.</p>

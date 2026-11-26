@@ -242,10 +242,19 @@ class HomeController extends Controller
         return 1.0;
     }
 
+    public const ALERTS_PER_PAGE = 20;
+
+    /** The alert feed, newest first, a page at a time (?page=1, 2, ...). */
     public function alerts(Request $r)
     {
-        return ['alerts' => $r->user()->notifications()->limit(50)->get()->map(fn ($n) => $n->data + [
-            'id' => $n->id, 'read' => $n->read_at !== null, 'at' => $n->created_at])];
+        $per = self::ALERTS_PER_PAGE;
+        $total = $r->user()->notifications()->count();
+        $pages = max(1, (int) ceil($total / $per));
+        $page = min($pages, max(1, (int) $r->query('page', 1)));
+
+        return ['alerts' => $r->user()->notifications()->offset(($page - 1) * $per)->limit($per)->get()->map(fn ($n) => $n->data + [
+            'id' => $n->id, 'read' => $n->read_at !== null, 'at' => $n->created_at]),
+            'page' => $page, 'pages' => $pages, 'total' => $total, 'unread' => $r->user()->unreadNotifications()->count()];
     }
 
     public function markRead(Request $r)

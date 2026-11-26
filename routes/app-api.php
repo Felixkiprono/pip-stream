@@ -75,6 +75,7 @@ Route::middleware(['auth', 'active'])->group(function () {
     Route::get('brokers/{broker}', [BrokerController::class, 'show']);
     Route::post('brokers/{broker}/test', [BrokerController::class, 'test']);
     Route::get('brokers/{broker}/test/{test}', [BrokerController::class, 'testResult']);
+    Route::post('brokers/{broker}/ping', [BrokerController::class, 'ping']);
     Route::post('brokers/{broker}/ea-key', [BrokerController::class, 'eaKey']);
     Route::post('brokers/{broker}/live-confirm', [BrokerController::class, 'confirmLive']);
     Route::delete('brokers/{broker}', [BrokerController::class, 'destroy']);
@@ -103,6 +104,7 @@ Route::middleware(['auth', 'active'])->group(function () {
         Route::get('users/{user}', [AdminController::class, 'user']);
         Route::post('users/{user}/status', [AdminController::class, 'userStatus']);
         Route::post('users/{user}/pause', [AdminController::class, 'userPause']);
+        Route::post('users/{user}/ping', [AdminController::class, 'userPing']);
         Route::post('users/{user}/role', [AdminController::class, 'userRole']);
         Route::post('users/{user}/trial', [AdminController::class, 'userTrial']);
         Route::get('audit', [AdminController::class, 'audit']);

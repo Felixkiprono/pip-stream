@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\AuditLog;
 use App\Models\BrokerAccount;
 use App\Pipstream\Bus;
+use App\Pipstream\EaPing;
 use App\Pipstream\LiveGate;
 use App\Pipstream\Vault;
 use Illuminate\Http\Request;
@@ -192,6 +193,16 @@ class BrokerController extends Controller
         AuditLog::record($r->user()->id, $order ? 'broker_test_order' : 'broker_test', 'broker_account', $broker->id);
 
         return ['test_id' => $id];
+    }
+
+    /** "Ping MetaTrader": is the terminal answering right now, and how fast. */
+    public function ping(Request $r, BrokerAccount $broker, EaPing $ping)
+    {
+        abort_unless($broker->user_id === $r->user()->id && $broker->enabled && $broker->connector === 'ea_bridge', 404);
+        abort_unless(\Illuminate\Support\Facades\RateLimiter::attempt("ea-ping:{$broker->id}", 1, fn () => true, 3), 429,
+            'Give it a few seconds between pings.');
+
+        return ['ping' => $ping->run([$broker])[0]];
     }
 
     public function testResult(Request $r, BrokerAccount $broker, string $test)

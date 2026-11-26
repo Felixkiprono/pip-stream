@@ -62,7 +62,7 @@ class TradeAlert extends Notification implements ShouldQueue
             'trade_opened', 'trade_modified', 'trade_closed', 'position_closed' => [['📈 My trades' => 'm:trades', '💰 Profit' => 'm:pnl']],
             'trade_failed' => [['🔎 See what happened' => $app('/app/alerts')]],
             'signal_skipped' => [['📊 Status' => 'm:status']],
-            'ea_offline' => [['🔧 Fix it in the app' => $app('/app/brokers')]],
+            'ea_offline' => [['📶 Ping MetaTrader' => 'm:ping', '🔧 Fix it in the app' => $app('/app/brokers')]],
             'ea_online', 'tg_reconnected' => [['📊 Status' => 'm:status']],
             'tg_disconnected' => [['🔗 Reconnect Telegram' => $app('/start/telegram')]],
             'plan_ending', 'plan_ended', 'payment_failed' => [['⭐ Renew my plan' => $app('/app/billing')]],

@@ -110,8 +110,26 @@ class BotScreens
         return [implode("\n", $lines), array_values(array_filter([
             $todo ?: null,
             [$paused ? '▶️ Resume copying' : '⏸ Pause copying' => $paused ? 'p:0' : 'p:1'],
+            $u->brokerAccounts()->where('enabled', true)->where('connector', 'ea_bridge')->exists() ? ['📶 Ping MetaTrader' => 'm:ping'] : null,
             ['📈 My trades' => 'm:trades', '💰 Profit' => 'm:pnl'],
             ['🌐 Open PipStream' => Bot::app()],
+        ]))];
+    }
+
+    /** /ping or "📶 Ping MetaTrader": ask each MetaTrader terminal to answer right now. */
+    public function ping(User $u): array
+    {
+        $eas = $u->brokerAccounts()->where('enabled', true)->where('connector', 'ea_bridge')->orderBy('created_at')->limit(3)->get();
+        if ($eas->isEmpty()) {
+            return ["You don't have a MetaTrader account connected yet. Add one in the app under Brokers.", [['🌐 Open PipStream' => Bot::app('/app/brokers')]]];
+        }
+        $lines = array_column(app(\App\Pipstream\EaPing::class)->run($eas), 'text');
+        $down = array_filter($lines, fn ($l) => str_contains($l, '🔌'));
+
+        return ["📶 Ping MetaTrader\n\n".implode("\n\n", $lines), array_values(array_filter([
+            ['🔁 Ping again' => 'm:ping'],
+            $down ? ['🔧 Fix it in the app' => Bot::app('/app/brokers')] : null,
+            ['📊 Status' => 'm:status'],
         ]))];
     }
 
@@ -305,7 +323,8 @@ class BotScreens
             'Just type your question here. Our team reads every message and replies in this chat.', '',
             'You can also:',
             '• Forward me a post from a signal channel to see how PipStream reads it',
-            '• Use the buttons below the chat to check trades, pause copying or manage channels', '',
+            '• Use the buttons below the chat to check trades, pause copying or manage channels',
+            '• Type /ping to check your MetaTrader is answering right now', '',
             'Adding a broker, real-money accounts and charts are in the app.']),
             [['🧪 Test a signal post' => 'm:test'], ['🌐 Open PipStream' => Bot::app()]]];
     }

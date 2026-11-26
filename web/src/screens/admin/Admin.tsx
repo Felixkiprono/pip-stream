@@ -10,6 +10,7 @@ import { SignOutButton } from '../../components/AppShell'
 import { ago } from '../../lib/format'
 import { useSession } from '../../lib/session'
 import { MessageCustomer } from './Bot'
+import { PingResult, type Ping } from '../../components/BrokerTest'
 
 const NAV = [
   { to: '/admin', label: 'Overview', icon: Activity, end: true },
@@ -447,6 +448,12 @@ export function AdminUser() {
   const qc = useQueryClient()
   const q = useQuery({ queryKey: ['admin', 'user', id], queryFn: () => api<UserDetail>(`admin/users/${id}`) })
   const [err, setErr] = useState('')
+  const [pings, setPings] = useState<Ping[] | null>(null)
+  const ping = useMutation({
+    mutationFn: () => post<{ pings: Ping[] }>(`admin/users/${id}/ping`, {}),
+    onSuccess: (r) => setPings(r.pings),
+    onError: (e) => setErr((e as Error).message),
+  })
   const act = useMutation({
     mutationFn: ({ path, body }: { path: string; body: object }) => post(`admin/users/${id}/${path}`, body),
     onSuccess: () => {
@@ -548,6 +555,14 @@ export function AdminUser() {
               ))}
             </div>
           ) : <p className="text-sm text-ink-3">No broker yet.</p>}
+          {d.brokers.some((b) => b.enabled && b.connector === 'ea_bridge') && (
+            <div className="mt-2 space-y-2">
+              <Button variant="soft" busy={ping.isPending} onClick={() => ping.mutate()}>
+                <Radio className="size-4" /> Ping MetaTrader
+              </Button>
+              {pings?.map((p) => <PingResult key={p.broker_id} ping={p} />)}
+            </div>
+          )}
         </Card>
       </div>
 

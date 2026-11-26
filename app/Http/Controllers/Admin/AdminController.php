@@ -8,6 +8,7 @@ use App\Models\Channel;
 use App\Models\ParserProfile;
 use App\Models\User;
 use App\Pipstream\Bus;
+use App\Pipstream\EaPing;
 use App\Pipstream\KillSwitch;
 use App\Pipstream\MailSettings;
 use App\Pipstream\PublicUrl;
@@ -451,6 +452,15 @@ class AdminController extends Controller
         $user->forceFill(['kill_switch' => $on])->save();
 
         return ['paused' => $on];
+    }
+
+    /** Ping the customer's MetaTrader terminals (EA) from support. */
+    public function userPing(Request $req, User $user, EaPing $ping)
+    {
+        $eas = $user->brokerAccounts()->where('enabled', true)->where('connector', 'ea_bridge')->orderBy('created_at')->limit(5)->get();
+        AuditLog::record($req->user()->id, 'admin_ea_ping', 'user', $user->id);
+
+        return ['pings' => $ping->run($eas)];
     }
 
     public function userRole(Request $req, User $user)

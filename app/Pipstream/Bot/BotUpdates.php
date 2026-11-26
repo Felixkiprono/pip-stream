@@ -152,7 +152,7 @@ class BotUpdates
 
             return ['menu' => 'menu', 'status' => 'status', 'trades' => 'trades', 'pnl' => 'pnl', 'profit' => 'pnl',
                 'channels' => 'channels', 'pause' => 'pause', 'resume' => 'resume', 'closeall' => 'closeall',
-                'plan' => 'plan', 'settings' => 'settings', 'help' => 'help', 'app' => 'app', 'test' => 'test',
+                'plan' => 'plan', 'settings' => 'settings', 'ping' => 'ping', 'help' => 'help', 'app' => 'app', 'test' => 'test',
                 'follow' => 'follow'][$cmd] ?? 'unknown';
         }
 
@@ -175,6 +175,7 @@ class BotUpdates
     {
         return match ($name) {
             'status' => $this->screens->status($u),
+            'ping' => $this->screens->ping($u),
             'trades' => $this->screens->trades($u),
             'closed' => $this->screens->closed($u),
             'pnl' => $this->screens->pnl($u),

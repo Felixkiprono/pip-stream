@@ -26,6 +26,12 @@ use Throwable;
  *
  * Grace periods are generous on purpose: the queue worker restarts itself every hour
  * (--max-time=3600) and a deploy restarts everything, neither of which should page anyone.
+ *
+ * No spam: one "down" and one "back" message per incident. Something that goes down again within
+ * FLAP_WINDOW_S of recovering (a laptop that sleeps, a flaky connection) opens a quiet incident:
+ * nobody is told unless it stays down for FLAP_WINDOW_S, and its recovery is quiet too.
+ * Closing an incident is a single conditional UPDATE, so the minute check here and the instant
+ * check when an EA calls in again (eaCheckedIn) can never both send "back online".
  */
 class Watchdog
 {
@@ -33,6 +39,7 @@ class Watchdog
     public const QUEUE_GRACE_S = 300;      // heartbeat job queued every minute; worker restarts hourly
     public const EA_GRACE_S = 180;         // EA checks in every second while MetaTrader is open
     public const WARMUP_S = 300;           // after the watchdog (re)starts, give everything time to come up
+    public const FLAP_WINDOW_S = 900;      // down again this soon after recovering: say nothing unless it stays down this long
 
     public function __construct(private Bus $bus) {}
 
@@ -140,16 +147,22 @@ class Watchdog
             if (! $c['ok'] && ! $row && ($warm || str_starts_with($c['key'], 'errors:'))) {
                 $id = DB::table('system_alerts')->insertGetId(['key' => $c['key'], 'severity' => $c['severity'] ?? 'error',
                     'title' => $c['title'], 'detail' => $c['detail'], 'user_id' => $c['user_id'] ?? null, 'started_at' => now()]);
-                $this->notify($c, false);
-                DB::table('system_alerts')->where('id', $id)->update(['notified_at' => now()]);
+                if (! $this->flapping($c['key'], $id)) {
+                    $this->notify($c, false);
+                    DB::table('system_alerts')->where('id', $id)->update(['notified_at' => now()]);
+                }
                 $changed['opened'][] = $c['key'];
             } elseif (! $c['ok'] && $row) {
                 DB::table('system_alerts')->where('id', $row->id)->update(['detail' => $c['detail']]);
+                // a quiet (flapping) incident that has now lasted long enough: tell people after all
+                if (! $row->notified_at && time() - strtotime($row->started_at) >= self::FLAP_WINDOW_S
+                    && DB::table('system_alerts')->where('id', $row->id)->whereNull('notified_at')->update(['notified_at' => now()])) {
+                    $this->notify($c, false);
+                }
             } elseif ($c['ok'] && $row) {
-                DB::table('system_alerts')->where('id', $row->id)->update(['resolved_at' => now()]);
-                $mins = max(1, (int) round((time() - strtotime($row->started_at)) / 60));
-                $this->notify($c + ['title' => $row->title], true, $mins);
-                $changed['resolved'][] = $c['key'];
+                if ($this->close($row, $c)) {
+                    $changed['resolved'][] = $c['key'];
+                }
             }
         }
         // a broker account that was removed or stopped copying live: nothing to watch any more
@@ -157,6 +170,40 @@ class Watchdog
             ->whereNotIn('key', array_column($checks, 'key'))->update(['resolved_at' => now()]);
 
         return $changed;
+    }
+
+    /** Went down again soon after an earlier incident on the same thing recovered. */
+    private function flapping(string $key, int $exceptId): bool
+    {
+        return DB::table('system_alerts')->where('key', $key)->where('id', '!=', $exceptId)
+            ->where('resolved_at', '>', now()->subSeconds(self::FLAP_WINDOW_S))->exists();
+    }
+
+    /** Close an open incident and send "back to normal" once, only if "down" was sent. False if someone else closed it first. */
+    private function close(object $row, array $c): bool
+    {
+        if (! DB::table('system_alerts')->where('id', $row->id)->whereNull('resolved_at')->update(['resolved_at' => now()])) {
+            return false;
+        }
+        if ($row->notified_at) {
+            $mins = max(1, (int) round((time() - strtotime($row->started_at)) / 60));
+            $this->notify(['key' => $row->key, 'title' => $row->title, 'user_id' => $row->user_id] + $c, true, $mins);
+        }
+
+        return true;
+    }
+
+    /**
+     * Called from the EA's sync when a terminal calls in after being quiet for longer than the grace
+     * period: closes its open "MetaTrader offline" incident at once, so the customer hears "back
+     * online" within seconds instead of at the next minute check. Cheap when nothing is open.
+     */
+    public function eaCheckedIn(string $brokerId): bool
+    {
+        Cache::put("watchdog:ea-seen:{$brokerId}", 1, now()->addDays(30));
+        $row = DB::table('system_alerts')->where('key', "ea:{$brokerId}")->whereNull('resolved_at')->first();
+
+        return $row ? $this->close($row, ['key' => $row->key, 'ok' => true, 'title' => $row->title, 'detail' => '']) : false;
     }
 
     private function notify(array $c, bool $recovered, int $mins = 0): void

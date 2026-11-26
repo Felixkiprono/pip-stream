@@ -27,7 +27,7 @@ class TradeAlert extends Notification implements ShouldQueue
         if ($prefs->has('telegram_bot') && $prefs['telegram_bot']) {
             $via[] = TelegramBotChannel::class;
         }
-        if ($prefs->has('email') && in_array($this->kind, ['trade_failed', 'signal_skipped', 'ea_offline', 'tg_disconnected', 'payment_failed', 'plan_ending'], true)) {
+        if ($prefs->has('email') && in_array($this->kind, ['trade_failed', 'signal_skipped', 'ea_offline', 'ea_online', 'tg_disconnected', 'tg_reconnected', 'payment_failed', 'plan_ending'], true)) {
             $via[] = 'mail';
         }
 
@@ -63,6 +63,7 @@ class TradeAlert extends Notification implements ShouldQueue
             'trade_failed' => [['🔎 See what happened' => $app('/app/alerts')]],
             'signal_skipped' => [['📊 Status' => 'm:status']],
             'ea_offline' => [['🔧 Fix it in the app' => $app('/app/brokers')]],
+            'ea_online', 'tg_reconnected' => [['📊 Status' => 'm:status']],
             'tg_disconnected' => [['🔗 Reconnect Telegram' => $app('/start/telegram')]],
             'plan_ending', 'plan_ended', 'payment_failed' => [['⭐ Renew my plan' => $app('/app/billing')]],
             default => [],

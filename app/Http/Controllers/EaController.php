@@ -8,6 +8,7 @@ use App\Notifications\Connected;
 use App\Pipstream\Accounts;
 use App\Pipstream\Bus;
 use App\Pipstream\LiveGate;
+use App\Pipstream\Watchdog;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Cache;
@@ -246,7 +247,13 @@ class EaController extends Controller
         }
         $redis = $this->bus->redis()->client();
         $now = time();
+        $prev = $redis->get($this->k($b->id, 'seen'));
         $redis->set($this->k($b->id, 'seen'), (string) $now, ['ex' => 86400]);
+        if (! is_string($prev) || $now - (int) $prev >= Watchdog::EA_GRACE_S) {
+            // back after a gap: close a "MetaTrader offline" incident now, after the EA has its answer
+            $id = $b->id;
+            dispatch(fn () => app(Watchdog::class)->eaCheckedIn($id))->afterResponse();
+        }
 
         foreach (array_slice((array) $r->input('results', []), 0, 50) as $res) {
             $id = preg_replace('/[^A-Za-z0-9]/', '', (string) ($res['id'] ?? ''));

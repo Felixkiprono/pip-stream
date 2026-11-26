@@ -80,4 +80,29 @@ class ChannelTestTest extends TestCase
     {
         $this->actingAs($this->customer())->postJson('/api/v1/telegram/test')->assertStatus(409);
     }
+
+    public function test_sample_signal_follows_the_current_gold_price(): void
+    {
+        $tests = app(\App\Pipstream\ChannelTest::class);
+        $p = config('pipstream.stream_prefix');
+        $r = Redis::connection('streams')->client();
+
+        // nothing known yet: stop-loss and take-profit in pips, no stale levels
+        $this->assertSame("XAUUSD BUY NOW\nSL: 30 pips\nTP: 60 pips", $tests->sample());
+
+        // the latest gold signal a channel posted (an old one is ignored)
+        $ch = \App\Models\Channel::create(['tg_chat_id' => -1009, 'title' => 'Gold', 'parser_profile_id' => 'pp_default']);
+        DB::table('signals')->insert(['id' => 'sig_old', 'channel_id' => $ch->id, 'message_id' => 1, 'status' => 'parsed', 'kind' => 'open',
+            'symbol' => 'XAUUSD', 'payload' => json_encode(['entry' => ['type' => 'market', 'price' => 3550]]), 'created_at' => now()->subDays(5)]);
+        $this->assertStringContainsString('pips', $tests->sample());
+        DB::table('signals')->insert(['id' => 'sig_new', 'channel_id' => $ch->id, 'message_id' => 2, 'status' => 'parsed', 'kind' => 'open',
+            'symbol' => 'XAUUSD', 'payload' => json_encode(['entry' => ['type' => 'range', 'from' => 4130, 'to' => 4134]])]);
+        $this->assertSame("XAUUSD BUY NOW @ 4132\nSL: 4117\nTP: 4147", $tests->sample());
+
+        // a MetaTrader price beats both: live first, then the last one we saw
+        $r->set("{$p}:quote:last:XAUUSD", '4150.4');
+        $this->assertSame("XAUUSD BUY NOW @ 4150\nSL: 4135\nTP: 4165", $tests->sample());
+        $r->set("{$p}:quote:XAUUSD", '4161.6');
+        $this->assertSame("XAUUSD BUY NOW @ 4162\nSL: 4147\nTP: 4177", $tests->sample());
+    }
 }

@@ -452,7 +452,7 @@ function Setup() {
 function TryIt() {
   const checks: [string, string][] = [
     ['Post arrived', '1.2 s after you posted it'],
-    ['Read as a signal', 'BUY XAUUSD at market · SL 4039 · TP 4064'],
+    ['Read as a signal', 'BUY XAUUSD @ 4049 · SL 4034 · TP 4064'],
     ['Would be copied', '0.05 lots of XAUUSD to your Practice account'],
   ]
   return (
@@ -482,7 +482,7 @@ function TryIt() {
         <div className="rounded-[28px] border border-line bg-surface p-5 shadow-card">
           <p className="text-xs font-semibold tracking-wider text-ink-3 uppercase">Your channel</p>
           <div className="mt-2 ml-auto max-w-[85%] rounded-2xl rounded-br-md bg-tg/10 px-3 py-2 font-mono text-[13px] whitespace-pre-wrap">
-            {'PipStream test PS-7K3QXM\nXAUUSD BUY NOW 4049\nSL 4039\nTP 4064'}
+            {'PipStream test PS-7K3QXM\nXAUUSD BUY NOW @ 4049\nSL: 4034\nTP: 4064'}
           </div>
           <p className="mt-5 text-xs font-semibold tracking-wider text-ink-3 uppercase">PipStream, live</p>
           <ul className="mt-2 space-y-2 rounded-2xl bg-surface-2 p-4 text-sm">

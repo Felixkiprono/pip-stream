@@ -61,22 +61,43 @@ class ChannelTest
         return is_array($t) && ($t['user_id'] ?? null) === $u->id ? $t : null;
     }
 
-    /** A sample signal to paste: near the current gold price when we know it, else in pips. */
+    /** Points either side of the price for the sample's stop-loss and take-profit. */
+    public const SAMPLE_DISTANCE = 15;
+
+    /**
+     * A sample gold signal to paste, built around today's price so it reads like a real post:
+     * the live price from a connected MetaTrader (fresh within 2 minutes), else the last live
+     * price we saw (kept 3 days), else the latest gold price a channel posted in the last 2 days.
+     * With no recent price at all the stop-loss and take-profit are given in pips instead.
+     */
     public function sample(): string
     {
-        $px = rescue(fn () => $this->redis()->get("{$this->p()}:quote:XAUUSD"), null, false);
-        if (! is_numeric($px)) {   // the latest gold price a channel posted this week
-            $s = DB::table('signals')->where('symbol', 'XAUUSD')->where('status', 'parsed')
-                ->where('created_at', '>=', now()->subDays(7))->orderByDesc('created_at')->value('payload');
-            $e = $s ? (json_decode($s, true)['entry'] ?? []) : [];
-            $px = $e['price'] ?? (isset($e['from'], $e['to']) ? ($e['from'] + $e['to']) / 2 : null);
+        $px = $this->goldPrice();
+        if ($px === null) {
+            return "XAUUSD BUY NOW\nSL: 30 pips\nTP: 60 pips";
         }
-        if (! is_numeric($px) || $px <= 0) {
-            return "XAUUSD BUY NOW\nSL 30 pips\nTP 60 pips";
-        }
-        $px = round((float) $px);
+        $px = (int) round($px);
+        $d = self::SAMPLE_DISTANCE;
 
-        return sprintf("XAUUSD BUY NOW %d\nSL %d\nTP %d", $px, $px - 10, $px + 15);
+        return "XAUUSD BUY NOW @ {$px}\nSL: ".($px - $d)."\nTP: ".($px + $d);
+    }
+
+    private function goldPrice(): ?float
+    {
+        foreach (['XAUUSD', 'last:XAUUSD'] as $k) {
+            $q = rescue(fn () => $this->redis()->get("{$this->p()}:quote:{$k}"), null, false);
+            if (is_numeric($q) && $q > 0) {
+                return (float) $q;
+            }
+        }
+        $s = DB::table('signals')->where('symbol', 'XAUUSD')->where('status', 'parsed')->where('kind', 'open')
+            ->where('created_at', '>=', now()->subDays(2))->orderByDesc('created_at')->value('payload');
+        $sig = $s ? (json_decode($s, true) ?: []) : [];
+        $e = $sig['entry'] ?? [];
+        $px = $e['price'] ?? (isset($e['from'], $e['to']) ? ($e['from'] + $e['to']) / 2 : null)
+            ?? (isset($sig['sl'], $sig['tps'][0]) ? ($sig['sl'] + $sig['tps'][0]) / 2 : null);
+
+        return is_numeric($px) && $px > 0 ? (float) $px : null;
     }
 
     /** What the app shows: the engine's raw result, plus plain-English lines. */

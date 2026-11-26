@@ -234,8 +234,12 @@ class EaController extends Controller
             }
             $mid = (string) round(($bid + $ask) / 2, 6);
             $redis->set("{$p}:quote:{$sym}", $mid, ['ex' => 120]);
-            if (preg_match('/^([A-Z0-9]{3,})[^A-Z0-9]/', $sym.'|', $m) && $m[1] !== $sym) {
-                $redis->set("{$p}:quote:{$m[1]}", $mid, ['ex' => 120]);
+            $plain = preg_match('/^([A-Z0-9]{3,})[^A-Z0-9]/', $sym.'|', $m) ? $m[1] : $sym;
+            if ($plain !== $sym) {
+                $redis->set("{$p}:quote:{$plain}", $mid, ['ex' => 120]);
+            }
+            if ($plain === 'XAUUSD') {   // the channel self-test's sample signal is built around it
+                $redis->set("{$p}:quote:last:XAUUSD", $mid, ['ex' => 3 * 86400]);
             }
         }
     }
